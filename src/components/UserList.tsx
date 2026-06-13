@@ -6,9 +6,11 @@ import { ChannelMember } from "@/lib/types";
 interface Props {
   members: ChannelMember[];
   currentUserId: string;
+  open?: boolean;
+  onClose?: () => void;
 }
 
-export default function UserList({ members, currentUserId }: Props) {
+export default function UserList({ members, currentUserId, open = false, onClose }: Props) {
   const ops = members.filter((m) => m.isOp);
   const regular = members.filter((m) => !m.isOp);
 
@@ -28,10 +30,13 @@ export default function UserList({ members, currentUserId }: Props) {
   );
 
   return (
-    <aside className="user-list">
+    <aside className={`user-list${open ? " panel--open" : ""}`}>
       <div className="panel-header">
         Users{" "}
         <span className="user-count">{members.length}</span>
+        <button className="drawer-close" onClick={onClose} aria-label="Chiudi">
+          ✕
+        </button>
       </div>
 
       {ops.length > 0 && (

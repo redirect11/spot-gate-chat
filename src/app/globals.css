@@ -64,6 +64,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* track the visible viewport on mobile (URL bar) */
   overflow: hidden;
 }
 
@@ -102,6 +103,42 @@ body {
 .app-status {
   color: var(--green);
   font-size: 11px;
+}
+
+/* Mobile-only drawer toggles in the header (hidden on desktop) */
+.app-menu-btn {
+  display: none;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.app-menu-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Close button inside each drawer (hidden on desktop) */
+.drawer-close {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.drawer-close:hover { color: var(--red); }
+
+/* Dim backdrop behind an open drawer */
+.drawer-backdrop {
+  display: none;
 }
 
 /* ── Body (3 columns) ──────────────────────────────────────────────────────── */
@@ -598,4 +635,59 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+}
+
+/* ── Mobile: side panels become off-canvas drawers ──────────────────────────── */
+@media (max-width: 768px) {
+  .app-header { padding: 6px 10px; gap: 8px; }
+  .app-title { font-size: 1.6rem; }
+  .app-header-info { font-size: 11px; gap: 6px; min-width: 0; }
+  .app-nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28vw; }
+
+  /* show the toggles + close buttons */
+  .app-menu-btn { display: inline-flex; align-items: center; }
+  .drawer-close { display: inline-flex; align-items: center; }
+
+  /* both side panels slide in from their edge over the chat */
+  .channel-list,
+  .user-list {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 50;
+    width: 80%;
+    max-width: 300px;
+    transition: transform 0.22s ease;
+    will-change: transform;
+  }
+  .channel-list {
+    left: 0;
+    transform: translateX(-100%);
+  }
+  .user-list {
+    right: 0;
+    transform: translateX(100%);
+  }
+  .channel-list.panel--open,
+  .user-list.panel--open {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
+  }
+
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  /* the chat column takes the full width on mobile */
+  .app-center { width: 100%; }
+
+  /* 16px input avoids iOS auto-zoom on focus */
+  .msg-input { font-size: 16px; }
+  .msg-input-bar { padding: 8px 10px; gap: 6px; }
+  .msg-input-prefix { display: none; } /* channel already shown in topic bar */
+  .msg-send-btn { padding: 8px 14px; }
 }

@@ -8,6 +8,8 @@ interface Props {
   currentChannelId: string;
   onSelect: (channelId: string) => void;
   onCreateChannel: (name: string, topic: string) => void;
+  open?: boolean;
+  onClose?: () => void;
 }
 
 export default function ChannelList({
@@ -15,6 +17,8 @@ export default function ChannelList({
   currentChannelId,
   onSelect,
   onCreateChannel,
+  open = false,
+  onClose,
 }: Props) {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
@@ -31,8 +35,13 @@ export default function ChannelList({
   };
 
   return (
-    <aside className="channel-list">
-      <div className="panel-header">Channels</div>
+    <aside className={`channel-list${open ? " panel--open" : ""}`}>
+      <div className="panel-header">
+        Channels
+        <button className="drawer-close" onClick={onClose} aria-label="Chiudi">
+          ✕
+        </button>
+      </div>
 
       <ul className="channel-items">
         {channels.map((ch) => (

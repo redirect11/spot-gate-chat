@@ -34,6 +34,9 @@ export default function ChatApp() {
   const [members, setMembers] = useState<ChannelMember[]>([]);
   const [logoTriggered, setLogoTriggered] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Mobile off-canvas drawers (ignored on desktop where panels are always shown)
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
 
   // Refs for cleanup
   const channelUnsub = useRef<(() => void) | null>(null);
@@ -178,6 +181,7 @@ export default function ChatApp() {
 
   const handleSelectChannel = useCallback((channelId: string) => {
     setCurrentChannelId(channelId);
+    setLeftOpen(false); // close the drawer after picking a channel on mobile
   }, []);
 
   const handleCreateChannel = async (name: string, topic: string) => {
@@ -212,24 +216,53 @@ export default function ChatApp() {
     <div className="app-root">
       {/* Header */}
       <header className="app-header">
+        <button
+          className="app-menu-btn app-menu-left"
+          onClick={() => setLeftOpen(true)}
+          aria-label="Apri canali"
+        >
+          ☰
+        </button>
+
         <h1 className="app-title">
           <Logo67th triggered={logoTriggered} onAnimationEnd={handleLogoAnimEnd} />
         </h1>
+
         <div className="app-header-info">
           <span className="app-nick" style={{ color: user.nickColor }}>
             {user.nickname}
           </span>
           <span className="app-status"> ● online</span>
         </div>
+
+        <button
+          className="app-menu-btn app-menu-right"
+          onClick={() => setRightOpen(true)}
+          aria-label="Apri utenti"
+        >
+          ♟ {members.length}
+        </button>
       </header>
 
       {/* Three-column body */}
       <div className="app-body">
+        {(leftOpen || rightOpen) && (
+          <div
+            className="drawer-backdrop"
+            onClick={() => {
+              setLeftOpen(false);
+              setRightOpen(false);
+            }}
+          />
+        )}
+
         <ChannelList
           channels={channels}
           currentChannelId={currentChannelId}
           onSelect={handleSelectChannel}
           onCreateChannel={handleCreateChannel}
+          open={leftOpen}
+          onClose={() => setLeftOpen(false)}
         />
 
         <div className="app-center">
@@ -245,7 +278,12 @@ export default function ChatApp() {
           />
         </div>
 
-        <UserList members={members} currentUserId={user.uid} />
+        <UserList
+          members={members}
+          currentUserId={user.uid}
+          open={rightOpen}
+          onClose={() => setRightOpen(false)}
+        />
       </div>
     </div>
   );

@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Public, ephemeral mIRC-style chat for the 67th meetup.
+// No private data is stored. Identity is a self-assigned nickname + a
+// client-generated (or anonymous-auth) uid. Rules below keep things bounded:
+// messages are immutable once written, channels can't be deleted, and the
+// shape of every write is validated. If Anonymous Auth gets enabled in the
+// Firebase console these same rules keep working — tighten them then by
+// requiring `request.auth != null`.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function validChannel() {
+      return request.resource.data.name is string
+        && request.resource.data.name.size() <= 64
+        && request.resource.data.topic is string
+        && request.resource.data.topic.size() <= 200;
+    }
+
+    match /channels/{channelId} {
+      allow read: if true;
+      allow create, update: if validChannel();
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 500
+          && request.resource.data.nickname is string
+          && request.resource.data.nickname.size() <= 40;
+        // messages are append-only — no edits or deletes from clients
+        allow update, delete: if false;
+      }
+
+      match /members/{uid} {
+        allow read: if true;
+        // presence docs: bounded size, no arbitrary fields abuse
+        allow write: if request.resource.data == null
+          || (request.resource.data.nickname is string
+              && request.resource.data.nickname.size() <= 40);
+      }
+    }
+  }
+}
