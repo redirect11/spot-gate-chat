@@ -589,19 +589,21 @@ body {
   display: inline-block;
   position: relative;
   transform-origin: 50% 90%;
-  /* idle seesaw — adjacent letters bob up/down in counter-phase, "6-7" style */
-  animation: logo-idle-wobble 1.1s ease-in-out infinite;
+  /* idle wobble — each letter rocks side to side, slightly out of phase */
+  animation: logo-idle-wobble 1.6s ease-in-out infinite;
 }
 
-.logo-char-0 { color: #ff6b6b; animation-direction: normal;  }
-.logo-char-1 { color: #ffa94d; animation-direction: reverse; }
-.logo-char-2 { color: #ffd43b; animation-direction: normal;  }
-.logo-char-3 { color: #69db7c; animation-direction: reverse; }
+.logo-char-0 { animation-delay: 0s;    color: #ff6b6b; }
+.logo-char-1 { animation-delay: 0.15s; color: #ffa94d; }
+.logo-char-2 { animation-delay: 0.3s;  color: #ffd43b; }
+.logo-char-3 { animation-delay: 0.45s; color: #69db7c; }
 
 @keyframes logo-idle-wobble {
-  0%   { transform: translateY(-5px) rotate(-9deg); }
-  50%  { transform: translateY(5px)  rotate(9deg);  }
-  100% { transform: translateY(-5px) rotate(-9deg); }
+  0%   { transform: rotate(-6deg) translateY(0); }
+  25%  { transform: rotate(0deg)  translateY(-2px); }
+  50%  { transform: rotate(6deg)  translateY(0); }
+  75%  { transform: rotate(0deg)  translateY(-2px); }
+  100% { transform: rotate(-6deg) translateY(0); }
 }
 
 /* Triggered by typing "67th" — each character has its own wild animation */
