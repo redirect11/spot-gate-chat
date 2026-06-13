@@ -26,6 +26,39 @@ import MessageInput from "./MessageInput";
 
 const STORAGE_KEY = "67th_user";
 
+// Safari (private mode, "Prevent cross-site tracking", partitioned/blocked
+// storage) can THROW on localStorage access. If unguarded, the bootstrap effect
+// throws before setLoading(false) runs and the app hangs on the loading screen,
+// so the nickname modal never appears. These helpers never throw.
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable — continue in-memory only */
+  }
+}
+
+// crypto.randomUUID exists only in secure contexts and Safari 15.4+. Fall back
+// to getRandomValues (universally supported) so connecting never throws.
+function safeUUID(): string {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* fall through */
+  }
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
 export default function ChatApp() {
   const [user, setUser] = useState<User | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -47,7 +80,7 @@ export default function ChatApp() {
 
   // ── Bootstrap ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = safeGetItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as User;
@@ -69,7 +102,7 @@ export default function ChatApp() {
       const uid = auth.currentUser?.uid ?? saved.uid;
       const u: User = { ...saved, uid };
       setUser(u);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+      safeSetItem(STORAGE_KEY, JSON.stringify(u));
     } catch {
       // Firebase not configured — run in demo mode
       setUser(saved);
@@ -155,7 +188,7 @@ export default function ChatApp() {
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleNicknameConfirm = async (nickname: string) => {
     const nickColor = getNickColor(nickname);
-    let uid = `anon_${crypto.randomUUID()}`;
+    let uid = `anon_${safeUUID()}`;
 
     try {
       const auth = getFirebaseAuth();
@@ -166,7 +199,7 @@ export default function ChatApp() {
     }
 
     const u: User = { uid, nickname, nickColor };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    safeSetItem(STORAGE_KEY, JSON.stringify(u));
     setUser(u);
   };
 
