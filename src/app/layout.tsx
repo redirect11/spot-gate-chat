@@ -14,10 +14,10 @@ export const viewport: Viewport = {
   themeColor: "#010409",
 };
 
-// Array/String.prototype.at polyfill for Safari < 15.4. It's a runtime API
-// (not syntax), so the browserslist transpilation doesn't cover it. Loaded
-// beforeInteractive via next/script so it runs before the app bundle without
-// interfering with React hydration.
+// Array/String.prototype.at polyfill for Safari < 15.4 / older Chrome. It's a
+// runtime API (not syntax), so the browserslist transpilation doesn't cover it.
+// Loaded beforeInteractive via next/script so it runs before the app bundle
+// without interfering with React hydration.
 const AT_POLYFILL = `(function(){function at(n){n=Math.trunc(n)||0;if(n<0)n+=this.length;if(n<0||n>=this.length)return undefined;return this[n];}if(!Array.prototype.at){Object.defineProperty(Array.prototype,'at',{value:at,writable:true,configurable:true});}if(!String.prototype.at){Object.defineProperty(String.prototype,'at',{value:at,writable:true,configurable:true});}})();`;
 
 export default function RootLayout({

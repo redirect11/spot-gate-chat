@@ -77,6 +77,9 @@ export default function ChatApp() {
   const msgUnsub = useRef<(() => void) | null>(null);
   const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevChannelRef = useRef<string | null>(null);
+  // Tracks the channel we've already announced a join for, so the effect
+  // re-running for the same channel doesn't post a duplicate "X has joined".
+  const joinedChannelRef = useRef<string | null>(null);
 
   // ── Bootstrap ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -157,8 +160,12 @@ export default function ChatApp() {
     setMessages([]);
     setMembers([]);
 
-    // Join new channel
-    joinChannel(currentChannelId, user).catch(() => {});
+    // Join new channel — guard so a re-run for the same channel doesn't
+    // produce a duplicate join message.
+    if (joinedChannelRef.current !== currentChannelId) {
+      joinedChannelRef.current = currentChannelId;
+      joinChannel(currentChannelId, user).catch(() => {});
+    }
 
     // Subscribe to messages + members
     msgUnsub.current = subscribeToMessages(currentChannelId, setMessages);
