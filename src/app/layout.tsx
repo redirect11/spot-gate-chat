@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,6 +14,12 @@ export const viewport: Viewport = {
   themeColor: "#010409",
 };
 
+// Array/String.prototype.at polyfill for Safari < 15.4. It's a runtime API
+// (not syntax), so the browserslist transpilation doesn't cover it. Loaded
+// beforeInteractive via next/script so it runs before the app bundle without
+// interfering with React hydration.
+const AT_POLYFILL = `(function(){function at(n){n=Math.trunc(n)||0;if(n<0)n+=this.length;if(n<0||n>=this.length)return undefined;return this[n];}if(!Array.prototype.at){Object.defineProperty(Array.prototype,'at',{value:at,writable:true,configurable:true});}if(!String.prototype.at){Object.defineProperty(String.prototype,'at',{value:at,writable:true,configurable:true});}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -21,14 +28,9 @@ export default function RootLayout({
   return (
     <html lang="it" className="h-full">
       <body className="h-full">
-        {/* TEMP diagnostic: surface uncaught JS errors on devices without
-            dev tools (e.g. iOS Safari). Remove once the hydration issue is
-            understood. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){function at(n){n=Math.trunc(n)||0;if(n<0)n+=this.length;if(n<0||n>=this.length)return undefined;return this[n];}if(!Array.prototype.at){Object.defineProperty(Array.prototype,'at',{value:at,writable:true,configurable:true});}if(!String.prototype.at){Object.defineProperty(String.prototype,'at',{value:at,writable:true,configurable:true});}})();(function(){function show(m){var d=document.getElementById('__err')||document.createElement('div');d.id='__err';d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#f85149;color:#000;font:12px monospace;padding:8px;white-space:pre-wrap;max-height:60%;overflow:auto';d.textContent='ERR: '+m;document.body.appendChild(d);}window.addEventListener('error',function(e){show((e.message||(e.error&&e.error.message)||'error')+' @ '+(e.filename||'')+':'+(e.lineno||'')+':'+(e.colno||''));});window.addEventListener('unhandledrejection',function(e){var r=e.reason;show('promise: '+((r&&(r.message||r.code||r))||'rejection'));});})();`,
-          }}
-        />
+        <Script id="at-polyfill" strategy="beforeInteractive">
+          {AT_POLYFILL}
+        </Script>
         {children}
       </body>
     </html>
