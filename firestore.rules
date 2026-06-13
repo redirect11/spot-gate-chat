@@ -28,7 +28,11 @@ service cloud.firestore {
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 500
           && request.resource.data.nickname is string
-          && request.resource.data.nickname.size() <= 40;
+          && request.resource.data.nickname.size() <= 40
+          // clients can't post as a bot (userId "bot:*") — only the
+          // server-side engine (admin SDK) bypasses these rules
+          && !(request.resource.data.userId is string
+               && request.resource.data.userId.matches('bot:.*'));
         // messages are append-only — no edits or deletes from clients
         allow update, delete: if false;
       }
@@ -40,6 +44,13 @@ service cloud.firestore {
           || (request.resource.data.nickname is string
               && request.resource.data.nickname.size() <= 40);
       }
+    }
+
+    // Bot registry — public read (the UI may list bots), but writes go only
+    // through the admin SDK (scripts/deploy-bots.mjs), which bypasses rules.
+    match /bots/{botId} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }
