@@ -2,6 +2,13 @@
   "name": "spot-gate-chat",
   "version": "0.1.0",
   "private": true,
+  "browserslist": [
+    "iOS >= 13",
+    "Safari >= 13",
+    "Chrome >= 85",
+    "Firefox >= 85",
+    "Edge >= 85"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
