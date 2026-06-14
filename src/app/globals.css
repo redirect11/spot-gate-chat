@@ -492,6 +492,38 @@ body {
 }
 .msg-send-btn:hover { background: var(--accent-hover); }
 
+.msg-nudge-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border-light);
+  color: var(--yellow);
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 9px;
+  cursor: pointer;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.msg-nudge-btn:hover { border-color: var(--yellow); }
+
+/* Incoming nudge / trillo line */
+.chat-line-nudge {
+  text-align: center;
+  color: var(--yellow);
+  font-weight: bold;
+  padding: 6px 0;
+}
+
+/* MSN-style window shake on nudge */
+.app-shake {
+  animation: app-shake 0.7s cubic-bezier(.36,.07,.19,.97) both;
+}
+@keyframes app-shake {
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-7px, 3px); }
+  40%, 60% { transform: translate(7px, -3px); }
+}
+
 /* ── User list (right sidebar) ──────────────────────────────────────────────── */
 .user-list {
   width: 160px;

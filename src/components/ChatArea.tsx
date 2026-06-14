@@ -55,6 +55,16 @@ export default function ChatArea({ messages, channelName, topic }: Props) {
             );
           }
 
+          if (msg.nudge) {
+            return (
+              <div key={msg.id} className="chat-line chat-line-nudge">
+                ⚡{" "}
+                <span style={{ color: msg.nickColor }}>{msg.nickname}</span>{" "}
+                ti ha mandato un trillo!
+              </div>
+            );
+          }
+
           if (msg.type === "action") {
             return (
               <div key={msg.id} className="chat-line chat-line-action">

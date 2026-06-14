@@ -14,6 +14,7 @@ export interface Message {
   text: string;
   timestamp: number;
   type: "message" | "join" | "leave" | "system" | "action";
+  nudge?: boolean;
 }
 
 export interface ChannelMember {

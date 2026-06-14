@@ -21,11 +21,17 @@ import {
   announce,
   subscribeToBots,
   sendDm,
+  sendNudge,
   subscribeDmMessages,
   subscribeDmThreads,
 } from "@/lib/firestore";
 import { Bot, Channel, ChannelMember, DmThread, Message, User } from "@/lib/types";
-import { notify, beep, requestNotificationPermission } from "@/lib/notifications";
+import {
+  notify,
+  beep,
+  msnNudge,
+  requestNotificationPermission,
+} from "@/lib/notifications";
 import { COMMANDS, buildHelp } from "@/lib/commands";
 
 import Logo67th from "./Logo67th";
@@ -101,6 +107,14 @@ export default function ChatApp() {
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   // locally-closed DMs (otherUid -> updatedAt at close); reappear on newer msg
   const [closedDms, setClosedDms] = useState<Record<string, number>>({});
+  const [shaking, setShaking] = useState(false);
+  const dmSeenMsgIds = useRef<Set<string>>(new Set());
+
+  const triggerNudge = useCallback(() => {
+    msnNudge();
+    setShaking(true);
+    setTimeout(() => setShaking(false), 800);
+  }, []);
   const dmSeen = useRef<Map<string, number>>(new Map()); // convoId -> last updatedAt seen
   const currentDmRef = useRef<{ uid: string; nick: string } | null>(null);
   currentDmRef.current = currentDm;
@@ -309,19 +323,34 @@ export default function ChatApp() {
     return () => unsub();
   }, [user]);
 
-  // Subscribe to the open DM's messages.
+  // Subscribe to the open DM's messages (+ detect incoming nudges/trilli).
   useEffect(() => {
     if (!user || !currentDm) {
       setDmMessages([]);
       return;
     }
     const convoId = [user.uid, currentDm.uid].sort().join("__");
-    const unsub = subscribeDmMessages(convoId, setDmMessages);
+    dmSeenMsgIds.current = new Set();
+    let baselined = false;
+    const unsub = subscribeDmMessages(convoId, (msgs) => {
+      if (!baselined) {
+        msgs.forEach((m) => dmSeenMsgIds.current.add(m.id));
+        baselined = true;
+      } else {
+        for (const m of msgs) {
+          if (!dmSeenMsgIds.current.has(m.id)) {
+            dmSeenMsgIds.current.add(m.id);
+            if (m.nudge && m.userId !== user.uid) triggerNudge();
+          }
+        }
+      }
+      setDmMessages(msgs);
+    });
     setUnread((u) =>
       u[`dm:${currentDm.uid}`] ? { ...u, [`dm:${currentDm.uid}`]: 0 } : u
     );
     return () => unsub();
-  }, [user, currentDm]);
+  }, [user, currentDm, triggerNudge]);
 
   // Background-subscribe to every entered channel to detect new chat messages
   // (only real messages/actions from other people — not system/join/leave or
@@ -581,6 +610,29 @@ export default function ChatApp() {
         }
         break;
       }
+      case "botreply": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const id = parts[0];
+        const mode = (parts[1] || "").toLowerCase();
+        if (!id || (mode !== "on" && mode !== "off")) {
+          pushNotice("Uso: /botreply <bot-id> on|off");
+          break;
+        }
+        try {
+          await adminCall(mode === "on" ? "bot.repliesOn" : "bot.repliesOff", {
+            botId: id,
+          });
+          pushNotice(
+            `Risposte AI di "${id}" ${mode === "on" ? "attivate" : "disattivate"}.`
+          );
+        } catch {
+          pushNotice("Operazione fallita.");
+        }
+        break;
+      }
       case "say": {
         if (!isAdmin) {
           pushNotice("Comando riservato agli operatori — /oper <password>");
@@ -804,6 +856,16 @@ export default function ChatApp() {
     setCurrentDm((cur) => (cur?.uid === uid ? null : cur));
   }, []);
 
+  const handleNudge = useCallback(async () => {
+    if (!user || !currentDm) return;
+    triggerNudge();
+    try {
+      await sendNudge(user, currentDm.uid, currentDm.nick);
+    } catch {
+      /* ignore */
+    }
+  }, [user, currentDm, triggerNudge]);
+
   const handleCreateChannel = async (name: string, topic: string) => {
     try {
       const id = await createChannel(name, topic);
@@ -873,7 +935,7 @@ export default function ChatApp() {
       : visibleThreads;
 
   return (
-    <div className="app-root">
+    <div className={`app-root${shaking ? " app-shake" : ""}`}>
       {/* Header */}
       <header className="app-header">
         <button
@@ -941,6 +1003,7 @@ export default function ChatApp() {
             onSend={handleSend}
             onTyping67th={() => setLogoTriggered(true)}
             isAdmin={isAdmin}
+            onNudge={currentDm ? handleNudge : undefined}
           />
         </div>
 

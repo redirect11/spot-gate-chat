@@ -52,7 +52,12 @@ interface BotConfig {
   actions?: Array<"delete" | "warn">; // moderator
   trigger?: BotTrigger; // persona
   maxReplyTokens?: number; // persona
+  repliesEnabled?: boolean; // persona: false → canned reply, no Claude call
+  autoReply?: string; // canned message used when replies are disabled
 }
+
+const DEFAULT_AUTOREPLY =
+  "🤖 Le risposte automatiche sono temporaneamente disattivate.";
 
 // Structured verdict for moderators — guaranteed JSON shape, no parsing.
 const Verdict = z.object({
@@ -198,6 +203,10 @@ export const onChatMessage = onDocumentCreated(
     for (const bot of bots.filter((b) => b.role === "persona")) {
       try {
         if (!triggerMatches(bot, msg.text)) continue;
+        if (bot.repliesEnabled === false) {
+          await postBotMessage(channelId, bot, bot.autoReply || DEFAULT_AUTOREPLY);
+          continue;
+        }
         const context = await recentContext(channelId, bot.contextWindow ?? 10);
         const res = await client.messages.create({
           model: bot.model || "claude-sonnet-4-6",
@@ -235,6 +244,123 @@ export const onChatMessage = onDocumentCreated(
     }
   }
 );
+
+// Persona bots reply in 1:1 private chats too. A DM with a bot has the bot's
+// "bot:<id>" id as one participant (in the convoId). The reply uses ONLY this
+// conversation's recent messages as context, so each DM has its own memory.
+export const onDmMessage = onDocumentCreated(
+  {
+    document: "dms/{convoId}/messages/{messageId}",
+    secrets: [ANTHROPIC_API_KEY],
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    const msg = snap.data();
+    if (!msg || typeof msg.text !== "string") return;
+    if (typeof msg.fromUid === "string" && msg.fromUid.startsWith("bot:")) {
+      return; // the bot's own message — avoid loops
+    }
+    const convoId = event.params.convoId;
+    const botPart = convoId.split("__").find((p) => p.startsWith("bot:"));
+    if (!botPart) return; // not a DM with a bot
+    const botId = botPart.slice("bot:".length);
+    const botSnap = await db.collection("bots").doc(botId).get();
+    if (!botSnap.exists) return;
+    const bot = botSnap.data() as BotConfig;
+    if (!bot.enabled) return;
+
+    // Only persona bots chat; moderators just send a canned line in DMs.
+    if (bot.role !== "persona") {
+      await postBotDm(
+        convoId,
+        bot,
+        botId,
+        bot.autoReply ||
+          "Sono un bot di moderazione: scrivimi nei canali, non in privato."
+      );
+      return;
+    }
+    if (bot.repliesEnabled === false) {
+      await postBotDm(convoId, bot, botId, bot.autoReply || DEFAULT_AUTOREPLY);
+      return;
+    }
+
+    try {
+      const ctxSnap = await db
+        .collection("dms")
+        .doc(convoId)
+        .collection("messages")
+        .orderBy("timestamp", "desc")
+        .limit(bot.contextWindow ?? 12)
+        .get();
+      const context = ctxSnap.docs
+        .map((d) => d.data())
+        .reverse()
+        .map((m) => `<${m.fromNick}> ${m.text}`)
+        .join("\n");
+
+      const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+      const res = await client.messages.create({
+        model: bot.model || "claude-sonnet-4-6",
+        max_tokens: bot.maxReplyTokens ?? 300,
+        system: [
+          {
+            type: "text",
+            text: bot.systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content:
+              `Sei "${bot.nickname}" in una chat privata 1:1 con ` +
+              `<${msg.fromNick}>. Conversazione finora:\n${context}\n\n` +
+              `Rispondi all'ultimo messaggio: "${msg.text}"`,
+          },
+        ],
+      });
+      const reply = res.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("")
+        .trim();
+      if (reply) {
+        await postBotDm(convoId, bot, botId, reply);
+        logger.info(`[${botId}] DM reply in ${convoId}`);
+      }
+    } catch (err) {
+      logger.error(`[${botId}] DM reply failed`, err);
+    }
+  }
+);
+
+async function postBotDm(
+  convoId: string,
+  bot: BotConfig,
+  botId: string,
+  text: string
+): Promise<void> {
+  await db.collection("dms").doc(convoId).collection("messages").add({
+    fromUid: `bot:${botId}`,
+    fromNick: bot.nickname,
+    fromColor: bot.nickColor,
+    text,
+    timestamp: FieldValue.serverTimestamp(),
+  });
+  await db
+    .collection("dms")
+    .doc(convoId)
+    .set(
+      {
+        updatedAt: Date.now(),
+        lastFrom: `bot:${botId}`,
+        lastText: text.slice(0, 120),
+      },
+      { merge: true }
+    );
+}
 
 async function isBanned(uid?: string, nick?: string): Promise<boolean> {
   if (uid) {
@@ -448,6 +574,20 @@ export const adminCommand = onCall(
           .collection("bots")
           .doc(args.botId)
           .set({ enabled: data.action === "bot.enable" }, { merge: true });
+        return { ok: true };
+      }
+
+      case "bot.repliesOn":
+      case "bot.repliesOff": {
+        if (!args.botId)
+          throw new HttpsError("invalid-argument", "botId mancante");
+        await db
+          .collection("bots")
+          .doc(args.botId)
+          .set(
+            { repliesEnabled: data.action === "bot.repliesOn" },
+            { merge: true }
+          );
         return { ok: true };
       }
 

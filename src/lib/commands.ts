@@ -35,6 +35,7 @@ export const COMMANDS: ChatCommand[] = [
   { name: "say", usage: "/say <bot-id> <testo>", desc: "Fai dire qualcosa a un bot", op: true },
   { name: "botoff", usage: "/botoff <bot-id>", desc: "Disattiva un bot", op: true },
   { name: "boton", usage: "/boton <bot-id>", desc: "Attiva un bot", op: true },
+  { name: "botreply", usage: "/botreply <bot-id> on|off", desc: "Risposte AI del bot on/off (off = messaggio automatico)", op: true },
 ];
 
 export const COMMAND_NAMES: string[] = COMMANDS.map((c) => c.name);

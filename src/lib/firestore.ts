@@ -307,6 +307,33 @@ export async function sendDm(
   });
 }
 
+export async function sendNudge(
+  me: User,
+  otherUid: string,
+  otherNick: string
+): Promise<void> {
+  const id = dmId(me.uid, otherUid);
+  await setDoc(
+    doc(db(), "dms", id),
+    {
+      participants: [me.uid, otherUid].sort(),
+      nicks: { [me.uid]: me.nickname, [otherUid]: otherNick },
+      updatedAt: Date.now(),
+      lastFrom: me.uid,
+      lastText: "⚡ Trillo!",
+    },
+    { merge: true }
+  );
+  await addDoc(collection(db(), "dms", id, "messages"), {
+    fromUid: me.uid,
+    fromNick: me.nickname,
+    fromColor: me.nickColor,
+    text: "⚡ Trillo!",
+    kind: "nudge",
+    timestamp: serverTimestamp(),
+  });
+}
+
 export function subscribeDmMessages(
   convoId: string,
   callback: (messages: Message[]) => void
@@ -330,6 +357,7 @@ export function subscribeDmMessages(
             ? data.timestamp.toMillis()
             : data.timestamp ?? Date.now(),
         type: "message",
+        nudge: data.kind === "nudge",
       };
     });
     callback(messages);

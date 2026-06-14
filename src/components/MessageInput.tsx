@@ -8,6 +8,7 @@ interface Props {
   onSend: (text: string) => void;
   onTyping67th: () => void;
   isAdmin?: boolean;
+  onNudge?: () => void;
 }
 
 export default function MessageInput({
@@ -15,6 +16,7 @@ export default function MessageInput({
   onSend,
   onTyping67th,
   isAdmin = false,
+  onNudge,
 }: Props) {
   const [text, setText] = useState("");
   // operator commands are hidden from non-operators
@@ -118,6 +120,16 @@ export default function MessageInput({
           spellCheck={false}
           maxLength={500}
         />
+        {onNudge && (
+          <button
+            type="button"
+            className="msg-nudge-btn"
+            title="Manda un trillo"
+            onClick={onNudge}
+          >
+            ⚡
+          </button>
+        )}
         <button type="submit" className="msg-send-btn">
           Send
         </button>

@@ -62,7 +62,16 @@ export default function UserList({
           <div className="user-group-label">🤖 Bots</div>
           <ul className="user-items">
             {bots.map((b) => (
-              <li key={`bot:${b.id}`} className="user-item" title={b.nickname}>
+              <li
+                key={`bot:${b.id}`}
+                className={`user-item${onUserClick ? " user-item-click" : ""}`}
+                title={`${b.nickname} — clicca per chat privata`}
+                onClick={
+                  onUserClick
+                    ? () => onUserClick(`bot:${b.id}`, b.nickname)
+                    : undefined
+                }
+              >
                 <span className="user-sigil">@</span>
                 <span className="user-nick" style={{ color: b.nickColor }}>
                   {b.nickname}
