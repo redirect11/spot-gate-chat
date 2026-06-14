@@ -1,16 +1,25 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { COMMANDS, COMMAND_NAMES } from "@/lib/commands";
+import { COMMANDS } from "@/lib/commands";
 
 interface Props {
   channelName: string;
   onSend: (text: string) => void;
   onTyping67th: () => void;
+  isAdmin?: boolean;
 }
 
-export default function MessageInput({ channelName, onSend, onTyping67th }: Props) {
+export default function MessageInput({
+  channelName,
+  onSend,
+  onTyping67th,
+  isAdmin = false,
+}: Props) {
   const [text, setText] = useState("");
+  // operator commands are hidden from non-operators
+  const allowed = COMMANDS.filter((c) => isAdmin || !c.op);
+  const allowedNames = allowed.map((c) => c.name);
   const inputRef = useRef<HTMLInputElement>(null);
   const seenTrigger = useRef(false);
   const cycleBase = useRef<string | null>(null);
@@ -40,11 +49,11 @@ export default function MessageInput({ channelName, onSend, onTyping67th }: Prop
 
     const cur = token.toLowerCase();
     let base = cycleBase.current;
-    let matches = base !== null ? COMMAND_NAMES.filter((n) => n.startsWith(base!)) : [];
+    let matches = base !== null ? allowedNames.filter((n) => n.startsWith(base!)) : [];
     if (base === null || !matches.includes(cur)) {
       base = cur;
       cycleBase.current = base;
-      matches = COMMAND_NAMES.filter((n) => n.startsWith(base!));
+      matches = allowedNames.filter((n) => n.startsWith(base!));
       cycleIdx.current = 0;
     } else {
       cycleIdx.current = (cycleIdx.current + 1) % matches.length;
@@ -66,7 +75,7 @@ export default function MessageInput({ channelName, onSend, onTyping67th }: Prop
 
   const prefixMatch = text.match(/^\/(\S*)$/);
   const suggestions = prefixMatch
-    ? COMMANDS.filter((c) => c.name.startsWith(prefixMatch[1].toLowerCase())).slice(0, 6)
+    ? allowed.filter((c) => c.name.startsWith(prefixMatch[1].toLowerCase())).slice(0, 6)
     : [];
 
   const pick = (name: string) => {

@@ -470,13 +470,14 @@ export default function ChatApp() {
         const which = parts[0]?.replace(/^\//, "").toLowerCase();
         if (which) {
           const c = COMMANDS.find((x) => x.name === which);
+          // don't reveal operator commands to non-operators
           pushNotice(
-            c
+            c && (!c.op || isAdmin)
               ? `${c.usage} — ${c.desc}${c.op ? " (operatore)" : ""}`
               : `Comando sconosciuto: /${which}`
           );
         } else {
-          pushNotice(buildHelp());
+          pushNotice(buildHelp(isAdmin));
         }
         break;
       }
@@ -903,6 +904,7 @@ export default function ChatApp() {
             channelName={viewName}
             onSend={handleSend}
             onTyping67th={() => setLogoTriggered(true)}
+            isAdmin={isAdmin}
           />
         </div>
 

@@ -39,15 +39,15 @@ export const COMMANDS: ChatCommand[] = [
 
 export const COMMAND_NAMES: string[] = COMMANDS.map((c) => c.name);
 
-export function buildHelp(): string {
+export function buildHelp(includeOp: boolean): string {
   const userCmds = COMMANDS.filter((c) => !c.op);
   const opCmds = COMMANDS.filter((c) => c.op);
   const fmt = (c: ChatCommand) => `  ${c.usage} — ${c.desc}`;
-  return (
-    "👤 Comandi utente:\n" +
-    userCmds.map(fmt).join("\n") +
-    "\n\n🛡️ Comandi operatore (dopo /oper):\n" +
-    opCmds.map(fmt).join("\n") +
-    "\n\nSuggerimento: premi Tab per autocompletare un comando."
-  );
+  let out = "👤 Comandi utente:\n" + userCmds.map(fmt).join("\n");
+  if (includeOp) {
+    out += "\n\n🛡️ Comandi operatore:\n" + opCmds.map(fmt).join("\n");
+  } else {
+    out += "\n\n(altri comandi sono riservati agli operatori — /oper <password>)";
+  }
+  return out + "\n\nSuggerimento: premi Tab per autocompletare un comando.";
 }
