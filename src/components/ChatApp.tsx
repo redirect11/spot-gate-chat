@@ -608,6 +608,64 @@ export default function ChatApp() {
         }
         break;
       }
+      case "newbot": {
+        if (!isAdmin) {
+          pushNotice("Prima autenticati: /oper <password> (nel DM di un bot).");
+          break;
+        }
+        const id = parts[0];
+        if (!id) {
+          pushNotice("Uso: /newbot <id> <nickname> [persona|moderator]");
+          break;
+        }
+        const rest = parts.slice(1);
+        let role = "persona";
+        if (
+          rest.length &&
+          (rest[rest.length - 1] === "persona" ||
+            rest[rest.length - 1] === "moderator")
+        ) {
+          role = rest.pop() as string;
+        }
+        const nickname = rest.join(" ") || id;
+        try {
+          await adminCall("bot.create", { botId: id, nickname, role });
+          pushNotice(
+            `✅ Bot "${id}" (${role}) creato. Aprigli un DM, fai /oper e /set prompt <testo> per configurarlo.`
+          );
+        } catch {
+          pushNotice("Creazione fallita (id già esistente o non valido?).");
+        }
+        break;
+      }
+      case "addbot":
+      case "rmbot": {
+        if (!isAdmin) {
+          pushNotice("Prima autenticati: /oper <password>.");
+          break;
+        }
+        if (currentDm) {
+          pushNotice("Usa questo comando in un canale, non in un DM.");
+          break;
+        }
+        const id = parts[0];
+        if (!id) {
+          pushNotice(`Uso: /${cmd} <bot-id>`);
+          break;
+        }
+        try {
+          await adminCall(
+            cmd === "addbot" ? "bot.joinChannel" : "bot.leaveChannel",
+            { botId: id, channelId: currentChannelId }
+          );
+          pushNotice(
+            `Bot "${id}" ${cmd === "addbot" ? "aggiunto a" : "rimosso da"} #${currentChannelId}.`
+          );
+        } catch {
+          pushNotice("Operazione fallita.");
+        }
+        break;
+      }
       // ── Bot configuration — only inside a bot's DM, after /oper ─────────────
       case "enable":
       case "disable":
@@ -923,10 +981,14 @@ export default function ChatApp() {
     .filter((m) => m.timestamp > clearedAt)
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  // Bots that operate in the current channel — shown as members.
-  const channelBots = bots.filter(
-    (b) => b.channels?.includes("*") || b.channels?.includes(currentChannelId)
-  );
+  // Bots shown as members. The #bots admin channel lists every bot.
+  const channelBots =
+    currentChannelId === "bots" && !currentDm
+      ? bots
+      : bots.filter(
+          (b) =>
+            b.channels?.includes("*") || b.channels?.includes(currentChannelId)
+        );
 
   // Active view: a channel, or a private conversation (DM).
   const viewMessages = currentDm ? dmMessages : displayMessages;

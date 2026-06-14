@@ -64,6 +64,7 @@ const DEFAULT_CHANNELS: Omit<Channel, "memberCount">[] = [
   { id: "random", name: "#random", topic: "Off-topic, meme, chaos", createdAt: Date.now() },
   { id: "tech", name: "#tech", topic: "Dev talk & code snippets", createdAt: Date.now() },
   { id: "events", name: "#events", topic: "Annunci eventi e meetup", createdAt: Date.now() },
+  { id: "bots", name: "#bots", topic: "Tutti i bot — DM un bot e /oper per gestirlo", createdAt: Date.now() },
 ];
 
 export async function initDefaultChannels(): Promise<void> {

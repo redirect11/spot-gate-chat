@@ -1,0 +1,14 @@
+{
+  "id": "botfather",
+  "enabled": true,
+  "role": "persona",
+  "nickname": "BotFather",
+  "nickColor": "#69db7c",
+  "channels": [],
+  "model": "claude-sonnet-4-6",
+  "contextWindow": 4,
+  "repliesEnabled": false,
+  "trigger": { "type": "mention" },
+  "autoReply": "Ciao! Sono BotFather. Per creare e gestire i bot: 1) /oper <password>  2) /newbot <id> <nickname> [persona|moderator]  3) apri il DM del nuovo bot e usa /set prompt <testo>, /set model <id>, /status. Gli utenti normali possono solo chattare con i bot.",
+  "systemPrompt": "Sei BotFather, il gestore della creazione dei bot."
+}

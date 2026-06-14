@@ -15,6 +15,7 @@
  */
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { setGlobalOptions, logger } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
@@ -362,6 +363,39 @@ async function postBotDm(
     );
 }
 
+// Auto-remove empty channels (no member active in the last ~2 min), except the
+// permanent default channels. Runs on a schedule. Channels are otherwise
+// persistent, so this gives IRC-like "channel disappears when everyone leaves".
+const KEEP_CHANNELS = new Set([
+  "general",
+  "random",
+  "tech",
+  "events",
+  "bots",
+]);
+export const cleanupEmptyChannels = onSchedule(
+  { schedule: "every 15 minutes", region: "europe-west1" },
+  async () => {
+    const now = Date.now();
+    const chans = await db.collection("channels").get();
+    for (const ch of chans.docs) {
+      if (KEEP_CHANNELS.has(ch.id)) continue;
+      const members = await db
+        .collection("channels")
+        .doc(ch.id)
+        .collection("members")
+        .get();
+      const active = members.docs.some(
+        (m) => now - ((m.data().lastSeen as number) || 0) < 120000
+      );
+      if (!active) {
+        await db.recursiveDelete(ch.ref);
+        logger.info(`cleaned up empty channel #${ch.id}`);
+      }
+    }
+  }
+);
+
 async function isBanned(uid?: string, nick?: string): Promise<boolean> {
   if (uid) {
     const byUid = await db.collection("bans").doc(uid).get();
@@ -588,6 +622,57 @@ export const adminCommand = onCall(
             { repliesEnabled: data.action === "bot.repliesOn" },
             { merge: true }
           );
+        return { ok: true };
+      }
+
+      case "bot.create": {
+        if (!args.botId || !args.nickname)
+          throw new HttpsError("invalid-argument", "id e nickname richiesti");
+        const id = args.botId.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        if (!id) throw new HttpsError("invalid-argument", "id non valido");
+        const existing = await db.collection("bots").doc(id).get();
+        if (existing.exists)
+          throw new HttpsError("already-exists", "bot già esistente");
+        const role = args.role === "moderator" ? "moderator" : "persona";
+        await db
+          .collection("bots")
+          .doc(id)
+          .set({
+            enabled: true,
+            role,
+            nickname: args.nickname.slice(0, 40),
+            nickColor: "#58a6ff",
+            // moderators auto-join every channel; personas are invited per-channel
+            channels: role === "moderator" ? ["*"] : [],
+            model:
+              role === "moderator"
+                ? "claude-haiku-4-5"
+                : "claude-sonnet-4-6",
+            contextWindow: role === "moderator" ? 12 : 10,
+            repliesEnabled: true,
+            trigger: { type: "mention" },
+            maxReplyTokens: 300,
+            actions: role === "moderator" ? ["delete", "warn"] : [],
+            systemPrompt:
+              role === "moderator"
+                ? "Sei un moderatore di chat. Valuta solo l'ultimo messaggio: 'delete' per spam/insulti gravi/hate/link malevoli, 'warn' per derive lievi, altrimenti 'allow'. Nel dubbio allow. reason: una frase in italiano."
+                : `Sei ${args.nickname}, un assistente AI amichevole in una chat. Rispondi in modo conciso e utile (1-4 frasi), in italiano o nella lingua dell'utente. Scrivi solo il testo della risposta, senza prefissi tipo <nome>.`,
+          });
+        return { ok: true, id };
+      }
+
+      case "bot.joinChannel":
+      case "bot.leaveChannel": {
+        if (!args.botId || !args.channelId)
+          throw new HttpsError("invalid-argument", "botId e channelId richiesti");
+        const op =
+          data.action === "bot.joinChannel"
+            ? FieldValue.arrayUnion(args.channelId)
+            : FieldValue.arrayRemove(args.channelId);
+        await db
+          .collection("bots")
+          .doc(args.botId)
+          .set({ channels: op }, { merge: true });
         return { ok: true };
       }
 

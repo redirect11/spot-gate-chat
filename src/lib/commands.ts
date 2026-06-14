@@ -33,6 +33,9 @@ export const COMMANDS: ChatCommand[] = [
   { name: "mutechannel", usage: "/mutechannel", desc: "Modera il canale: solo gli op scrivono", op: true },
   { name: "unmutechannel", usage: "/unmutechannel", desc: "Togli la moderazione del canale", op: true },
   { name: "opme", usage: "/opme", desc: "Diventa operatore (@) di questo canale", op: true },
+  { name: "newbot", usage: "/newbot <id> <nick> [persona|moderator]", desc: "Crea un nuovo bot AI", op: true },
+  { name: "addbot", usage: "/addbot <bot-id>", desc: "Invita un bot in questo canale", op: true },
+  { name: "rmbot", usage: "/rmbot <bot-id>", desc: "Rimuovi un bot da questo canale", op: true },
   // ── Bot config (nel DM del bot, dopo /oper) ──
   { name: "status", usage: "/status", desc: "Mostra la config del bot (nel suo DM)", op: true },
   { name: "enable", usage: "/enable", desc: "Attiva il bot (nel suo DM)", op: true },

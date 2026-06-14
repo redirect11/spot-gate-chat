@@ -4,7 +4,7 @@
   "role": "persona",
   "nickname": "AskBot",
   "nickColor": "#58a6ff",
-  "channels": ["*"],
+  "channels": [],
   "model": "claude-sonnet-4-6",
   "contextWindow": 10,
   "trigger": { "type": "mention" },
