@@ -837,6 +837,22 @@ export default function ChatApp() {
     ? "conversazione privata — visibile solo a voi due"
     : currentChannel?.topic ?? "";
 
+  // DM list shown in the sidebar = real threads + the currently-open one
+  // (even before the first message, like an mIRC query window — local only).
+  const dmList: DmThread[] =
+    currentDm && !dmThreads.some((t) => t.otherUid === currentDm.uid)
+      ? [
+          {
+            convoId: `local_${currentDm.uid}`,
+            otherUid: currentDm.uid,
+            otherNick: currentDm.nick,
+            updatedAt: Date.now(),
+            lastFrom: "",
+          },
+          ...dmThreads,
+        ]
+      : dmThreads;
+
   return (
     <div className="app-root">
       {/* Header */}
@@ -887,7 +903,7 @@ export default function ChatApp() {
           onSelect={handleSelectChannel}
           onCreateChannel={handleCreateChannel}
           unread={unread}
-          dmThreads={dmThreads}
+          dmThreads={dmList}
           activeDmUid={currentDm?.uid ?? null}
           onSelectDm={openDm}
           open={leftOpen}
