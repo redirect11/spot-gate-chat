@@ -18,8 +18,9 @@ import {
   sendActionMessage,
   renameMember,
   announce,
+  subscribeToBots,
 } from "@/lib/firestore";
-import { Channel, ChannelMember, Message, User } from "@/lib/types";
+import { Bot, Channel, ChannelMember, Message, User } from "@/lib/types";
 import { notify, requestNotificationPermission } from "@/lib/notifications";
 
 import Logo67th from "./Logo67th";
@@ -70,6 +71,7 @@ export default function ChatApp() {
   const [currentChannelId, setCurrentChannelId] = useState("general");
   const [messages, setMessages] = useState<Message[]>([]);
   const [members, setMembers] = useState<ChannelMember[]>([]);
+  const [bots, setBots] = useState<Bot[]>([]);
   const [logoTriggered, setLogoTriggered] = useState(false);
   const [loading, setLoading] = useState(true);
   // Mobile off-canvas drawers (ignored on desktop where panels are always shown)
@@ -224,6 +226,13 @@ export default function ChatApp() {
   // Ask for browser-notification permission once the user is in.
   useEffect(() => {
     if (user) requestNotificationPermission();
+  }, [user]);
+
+  // Live list of bots (shown as channel members).
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeToBots(setBots);
+    return () => unsub();
   }, [user]);
 
   // Background-subscribe to every entered channel to detect new chat messages
@@ -460,6 +469,11 @@ export default function ChatApp() {
     .filter((m) => m.timestamp > clearedAt)
     .sort((a, b) => a.timestamp - b.timestamp);
 
+  // Bots that operate in the current channel — shown as members.
+  const channelBots = bots.filter(
+    (b) => b.channels?.includes("*") || b.channels?.includes(currentChannelId)
+  );
+
   return (
     <div className="app-root">
       {/* Header */}
@@ -488,7 +502,7 @@ export default function ChatApp() {
           onClick={() => setRightOpen(true)}
           aria-label="Apri utenti"
         >
-          ♟ {members.length}
+          ♟ {members.length + channelBots.length}
         </button>
       </header>
 
@@ -529,6 +543,7 @@ export default function ChatApp() {
 
         <UserList
           members={members}
+          bots={channelBots}
           currentUserId={user.uid}
           open={rightOpen}
           onClose={() => setRightOpen(false)}

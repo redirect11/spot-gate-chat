@@ -29,7 +29,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { getDb } from "./firebase";
-import { Channel, Message, ChannelMember, User } from "./types";
+import { Channel, Message, ChannelMember, User, Bot } from "./types";
 
 function db() {
   return getDb();
@@ -271,4 +271,16 @@ export async function announce(
   text: string
 ): Promise<void> {
   await sendSystemMessage(channelId, text, "system");
+}
+
+// ── Bots ──────────────────────────────────────────────────────────────────────
+// Live list of enabled bots from the /bots registry (public-read). The UI shows
+// these as members of the channels they operate in.
+export function subscribeToBots(callback: (bots: Bot[]) => void): () => void {
+  return onSnapshot(collection(db(), "bots"), (snap) => {
+    const bots: Bot[] = snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as Omit<Bot, "id">) }))
+      .filter((b) => b.enabled);
+    callback(bots);
+  });
 }

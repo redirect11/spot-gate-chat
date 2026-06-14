@@ -29,3 +29,12 @@ export interface User {
   nickname: string;
   nickColor: string;
 }
+
+export interface Bot {
+  id: string;
+  nickname: string;
+  nickColor: string;
+  channels: string[];
+  role: string;
+  enabled: boolean;
+}
