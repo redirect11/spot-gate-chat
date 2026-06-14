@@ -12,6 +12,7 @@ interface Props {
   dmThreads?: DmThread[];
   activeDmUid?: string | null;
   onSelectDm?: (uid: string, nick: string) => void;
+  onCloseDm?: (uid: string, updatedAt: number) => void;
   open?: boolean;
   onClose?: () => void;
 }
@@ -25,6 +26,7 @@ export default function ChannelList({
   dmThreads = [],
   activeDmUid = null,
   onSelectDm,
+  onCloseDm,
   open = false,
   onClose,
 }: Props) {
@@ -89,12 +91,24 @@ export default function ChannelList({
                 title={t.otherNick}
               >
                 <span className="channel-name">@{t.otherNick}</span>
-                {unread[`dm:${t.otherUid}`] > 0 &&
-                  t.otherUid !== activeDmUid && (
-                    <span className="channel-unread">
-                      {unread[`dm:${t.otherUid}`]}
-                    </span>
-                  )}
+                <span className="dm-right">
+                  {unread[`dm:${t.otherUid}`] > 0 &&
+                    t.otherUid !== activeDmUid && (
+                      <span className="channel-unread">
+                        {unread[`dm:${t.otherUid}`]}
+                      </span>
+                    )}
+                  <button
+                    className="dm-close"
+                    title="Chiudi conversazione"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseDm?.(t.otherUid, t.updatedAt);
+                    }}
+                  >
+                    ✕
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

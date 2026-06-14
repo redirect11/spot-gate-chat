@@ -17,6 +17,35 @@ export async function requestNotificationPermission(): Promise<void> {
   }
 }
 
+let audioCtx: AudioContext | null = null;
+
+// Short "blip" for incoming private messages. No asset needed (Web Audio).
+export function beep(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = audioCtx || new Ctx();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.value = 0.06;
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    const t = audioCtx.currentTime;
+    o.start(t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.stop(t + 0.2);
+  } catch {
+    /* audio unavailable */
+  }
+}
+
 export function notify(title: string, body: string): void {
   if (!canNotify() || Notification.permission !== "granted") return;
   try {

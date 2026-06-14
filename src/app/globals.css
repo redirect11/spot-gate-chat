@@ -241,6 +241,25 @@ body {
   text-align: center;
 }
 
+.dm-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.dm-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.dm-close:hover {
+  color: var(--red);
+}
+
 .channel-new-section {
   padding: 8px;
   border-top: 1px solid var(--border);

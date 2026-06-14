@@ -25,7 +25,7 @@ import {
   subscribeDmThreads,
 } from "@/lib/firestore";
 import { Bot, Channel, ChannelMember, DmThread, Message, User } from "@/lib/types";
-import { notify, requestNotificationPermission } from "@/lib/notifications";
+import { notify, beep, requestNotificationPermission } from "@/lib/notifications";
 import { COMMANDS, buildHelp } from "@/lib/commands";
 
 import Logo67th from "./Logo67th";
@@ -99,6 +99,8 @@ export default function ChatApp() {
   const [dmThreads, setDmThreads] = useState<DmThread[]>([]);
   const [currentDm, setCurrentDm] = useState<{ uid: string; nick: string } | null>(null);
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
+  // locally-closed DMs (otherUid -> updatedAt at close); reappear on newer msg
+  const [closedDms, setClosedDms] = useState<Record<string, number>>({});
   const dmSeen = useRef<Map<string, number>>(new Map()); // convoId -> last updatedAt seen
   const currentDmRef = useRef<{ uid: string; nick: string } | null>(null);
   currentDmRef.current = currentDm;
@@ -296,6 +298,7 @@ export default function ChatApp() {
               ...u,
               [`dm:${t.otherUid}`]: (u[`dm:${t.otherUid}`] || 0) + 1,
             }));
+            beep(); // audible blip for incoming PMs
             if (typeof document !== "undefined" && document.hidden) {
               notify(`@${t.otherNick}`, "Nuovo messaggio privato");
             }
@@ -787,7 +790,18 @@ export default function ChatApp() {
 
   const openDm = useCallback((uid: string, nick: string) => {
     setCurrentDm({ uid, nick });
+    setClosedDms((p) => {
+      if (p[uid] === undefined) return p;
+      const next = { ...p };
+      delete next[uid]; // reopening clears the closed flag
+      return next;
+    });
     setLeftOpen(false);
+  }, []);
+
+  const closeDm = useCallback((uid: string, updatedAt: number) => {
+    setClosedDms((p) => ({ ...p, [uid]: updatedAt || Date.now() }));
+    setCurrentDm((cur) => (cur?.uid === uid ? null : cur));
   }, []);
 
   const handleCreateChannel = async (name: string, topic: string) => {
@@ -837,10 +851,15 @@ export default function ChatApp() {
     ? "conversazione privata — visibile solo a voi due"
     : currentChannel?.topic ?? "";
 
-  // DM list shown in the sidebar = real threads + the currently-open one
-  // (even before the first message, like an mIRC query window — local only).
+  // DM list shown in the sidebar = real threads (minus locally-closed ones)
+  // + the currently-open one (even before the first message, like an mIRC
+  // query window — local only).
+  const visibleThreads = dmThreads.filter((t) => {
+    const cl = closedDms[t.otherUid];
+    return cl === undefined || t.updatedAt > cl;
+  });
   const dmList: DmThread[] =
-    currentDm && !dmThreads.some((t) => t.otherUid === currentDm.uid)
+    currentDm && !visibleThreads.some((t) => t.otherUid === currentDm.uid)
       ? [
           {
             convoId: `local_${currentDm.uid}`,
@@ -849,9 +868,9 @@ export default function ChatApp() {
             updatedAt: Date.now(),
             lastFrom: "",
           },
-          ...dmThreads,
+          ...visibleThreads,
         ]
-      : dmThreads;
+      : visibleThreads;
 
   return (
     <div className="app-root">
@@ -906,6 +925,7 @@ export default function ChatApp() {
           dmThreads={dmList}
           activeDmUid={currentDm?.uid ?? null}
           onSelectDm={openDm}
+          onCloseDm={closeDm}
           open={leftOpen}
           onClose={() => setLeftOpen(false)}
         />
