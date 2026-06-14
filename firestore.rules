@@ -88,6 +88,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Nickname registry — claimed only via the claimNick Cloud Function.
+    match /nicks/{lowerNick} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Private messages (DMs). Note: without authenticated identities these are
     // not cryptographically private — they're validated but readable by anyone
     // who knows the conversation id. Casual privacy only.

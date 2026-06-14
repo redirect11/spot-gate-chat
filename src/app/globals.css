@@ -636,6 +636,12 @@ body {
   text-align: center;
 }
 
+.modal-error {
+  font-size: 12px;
+  color: var(--red);
+  margin-top: 2px;
+}
+
 /* ── Logo 67th — the star of the show ──────────────────────────────────────── */
 .logo-67th {
   font-family: var(--font-logo);

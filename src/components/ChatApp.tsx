@@ -138,6 +138,12 @@ export default function ChatApp() {
       const u: User = { ...saved, uid };
       setUser(u);
       safeSetItem(STORAGE_KEY, JSON.stringify(u));
+      // refresh our nick reservation (best-effort)
+      httpsCallable(getAppFunctions(), "claimNick")({
+        uid,
+        nick: u.nickname,
+        oldNick: u.nickname,
+      }).catch(() => {});
     } catch {
       // Firebase not configured — run in demo mode
       setUser(saved);
@@ -359,7 +365,9 @@ export default function ChatApp() {
   }, [unread]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleNicknameConfirm = async (nickname: string) => {
+  const handleNicknameConfirm = async (
+    nickname: string
+  ): Promise<string | null> => {
     const nickColor = getNickColor(nickname);
     let uid = `anon_${safeUUID()}`;
 
@@ -371,9 +379,17 @@ export default function ChatApp() {
       // Firebase not configured
     }
 
+    // Server confirms the nickname is free (unique) before we register.
+    try {
+      await httpsCallable(getAppFunctions(), "claimNick")({ uid, nick: nickname });
+    } catch {
+      return "Nickname già in uso — scegline un altro.";
+    }
+
     const u: User = { uid, nickname, nickColor };
     safeSetItem(STORAGE_KEY, JSON.stringify(u));
     setUser(u);
+    return null;
   };
 
   const pushNotice = useCallback((text: string) => {
@@ -399,6 +415,16 @@ export default function ChatApp() {
       return;
     }
     if (nick === user.nickname) return;
+    try {
+      await httpsCallable(getAppFunctions(), "claimNick")({
+        uid: user.uid,
+        nick,
+        oldNick: user.nickname,
+      });
+    } catch {
+      pushNotice("Nickname già in uso — scegline un altro.");
+      return;
+    }
     const nickColor = getNickColor(nick);
     const old = user.nickname;
     const updated: User = { ...user, nickname: nick, nickColor };

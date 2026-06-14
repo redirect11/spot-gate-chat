@@ -349,6 +349,49 @@ export const recordPresence = onCall(
   }
 );
 
+// Reserve a unique nickname for a uid. Reservations go stale after 12h so
+// abandoned nicks free up; the same uid can always refresh its own. Throws
+// "already-exists" if another (active) user holds the nick.
+export const claimNick = onCall({ region: "europe-west8" }, async (req) => {
+  const data = (req.data || {}) as {
+    uid?: string;
+    nick?: string;
+    oldNick?: string;
+  };
+  const uid = data.uid;
+  let nick = (data.nick || "").trim().slice(0, 20);
+  if (!uid || typeof uid !== "string" || !nick) {
+    throw new HttpsError("invalid-argument", "uid e nick richiesti");
+  }
+  const lower = nick.toLowerCase();
+  const STALE_MS = 12 * 60 * 60 * 1000;
+  const ref = db.collection("nicks").doc(lower);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists) {
+      const d = snap.data();
+      const at =
+        d?.at && typeof d.at.toMillis === "function" ? d.at.toMillis() : 0;
+      const fresh = Date.now() - at < STALE_MS;
+      if (d?.uid !== uid && fresh) {
+        throw new HttpsError("already-exists", "Nickname già in uso");
+      }
+    }
+    tx.set(ref, { uid, nickname: nick, at: FieldValue.serverTimestamp() });
+  });
+
+  // release the previous reservation when changing nick
+  if (data.oldNick && data.oldNick.toLowerCase() !== lower) {
+    const oldRef = db.collection("nicks").doc(data.oldNick.toLowerCase());
+    const oldSnap = await oldRef.get();
+    if (oldSnap.exists && oldSnap.data()?.uid === uid) {
+      await oldRef.delete().catch(() => {});
+    }
+  }
+  return { ok: true, nick };
+});
+
 // First person to enter a channel (when no operator is present) becomes its
 // operator — classic IRC behaviour. Op status is set here by the admin SDK so
 // clients can't grant it to themselves (security rules forbid that).

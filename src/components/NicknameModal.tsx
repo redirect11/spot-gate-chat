@@ -3,7 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 
 interface Props {
-  onConfirm: (nickname: string) => void;
+  /** returns an error message if the nick can't be used, or null on success */
+  onConfirm: (nickname: string) => Promise<string | null>;
 }
 
 const ADJECTIVES = ["Dark", "Neon", "Ghost", "Fast", "Wild", "Lazy", "Rad"];
@@ -22,6 +23,8 @@ function randomNick(): string {
 
 export default function NicknameModal({ onConfirm }: Props) {
   const [nick, setNick] = useState(randomNick());
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -29,19 +32,28 @@ export default function NicknameModal({ onConfirm }: Props) {
     inputRef.current?.select();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     const trimmed = nick.trim().replace(/\s+/g, "_").slice(0, 20);
-    if (trimmed) onConfirm(trimmed);
+    if (!trimmed) return;
+    setSubmitting(true);
+    setError(null);
+    const err = await onConfirm(trimmed);
+    if (err) {
+      setError(err);
+      setSubmitting(false);
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+    // on success the component unmounts (user is set)
   };
 
   return (
     <div className="modal-overlay">
       <div className="modal-box">
         <div className="modal-header">
-          <span className="modal-title-bar">
-            ■ 67t — Set your nickname
-          </span>
+          <span className="modal-title-bar">■ 67t — Set your nickname</span>
         </div>
         <div className="modal-body">
           <p className="modal-desc">
@@ -53,13 +65,18 @@ export default function NicknameModal({ onConfirm }: Props) {
               ref={inputRef}
               className="modal-input"
               value={nick}
-              onChange={(e) => setNick(e.target.value)}
+              onChange={(e) => {
+                setNick(e.target.value);
+                setError(null);
+              }}
               maxLength={20}
               spellCheck={false}
               autoComplete="off"
+              disabled={submitting}
             />
-            <button type="submit" className="modal-btn">
-              Connect →
+            {error && <p className="modal-error">{error}</p>}
+            <button type="submit" className="modal-btn" disabled={submitting}>
+              {submitting ? "…" : "Connect →"}
             </button>
           </form>
           <p className="modal-hint">Max 20 characters. No spaces.</p>
