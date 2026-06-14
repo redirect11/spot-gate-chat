@@ -360,10 +360,10 @@ body {
   background-repeat: repeat-x;
   background-size: 440px 100%;
   image-rendering: pixelated;
-  opacity: 0.13;
+  opacity: 0.24;
   box-shadow:
-    inset -26px -26px 50px rgba(0, 0, 0, 0.65),
-    inset 20px 20px 44px rgba(120, 180, 255, 0.22);
+    inset -26px -26px 50px rgba(0, 0, 0, 0.6),
+    inset 20px 20px 44px rgba(120, 180, 255, 0.3);
   animation: earth-spin 22s linear infinite;
 }
 @keyframes earth-spin {
