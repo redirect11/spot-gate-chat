@@ -24,6 +24,7 @@ import {
   sendNudge,
   subscribeDmMessages,
   subscribeDmThreads,
+  isInvited,
 } from "@/lib/firestore";
 import { Bot, Channel, ChannelMember, DmThread, Message, User } from "@/lib/types";
 import {
@@ -473,7 +474,11 @@ export default function ChatApp() {
 
   const adminCall = async (action: string, args: Record<string, string>) => {
     const fn = httpsCallable(getAppFunctions(), "adminCommand");
-    await fn({ password: adminPwdRef.current ?? "", action, args });
+    await fn({
+      password: adminPwdRef.current ?? "",
+      action,
+      args: { ...args, byUid: user?.uid ?? "" },
+    });
   };
 
   const handleQuit = async () => {
@@ -597,9 +602,8 @@ export default function ChatApp() {
           break;
         }
         try {
-          await adminCall("op", {
+          await adminCall("opself", {
             channelId: currentChannelId,
-            uid: user.uid,
             nick: user.nickname,
           });
           pushNotice("Ora sei operatore (@) di questo canale.");
@@ -970,11 +974,23 @@ export default function ChatApp() {
     }
   };
 
-  const handleSelectChannel = useCallback((channelId: string) => {
-    setCurrentChannelId(channelId);
-    setCurrentDm(null); // leaving DM view
-    setLeftOpen(false); // close the drawer after picking a channel on mobile
-  }, []);
+  const handleSelectChannel = useCallback(
+    async (channelId: string) => {
+      const ch = channels.find((c) => c.id === channelId);
+      if (ch?.locked && user) {
+        const allowed = await isInvited(channelId, user.uid);
+        if (!allowed) {
+          pushNotice(`🔒 #${channelId} è chiuso: serve un invito.`);
+          setLeftOpen(false);
+          return;
+        }
+      }
+      setCurrentChannelId(channelId);
+      setCurrentDm(null); // leaving DM view
+      setLeftOpen(false); // close the drawer after picking a channel on mobile
+    },
+    [channels, user, pushNotice]
+  );
 
   const openDm = useCallback((uid: string, nick: string) => {
     setCurrentDm({ uid, nick });

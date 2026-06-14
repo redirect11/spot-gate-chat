@@ -440,6 +440,20 @@ export const cleanupEmptyChannels = onSchedule(
   }
 );
 
+async function isChannelOp(
+  uid: string | undefined,
+  channelId: string | undefined
+): Promise<boolean> {
+  if (!uid || !channelId) return false;
+  const m = await db
+    .collection("channels")
+    .doc(channelId)
+    .collection("members")
+    .doc(uid)
+    .get();
+  return m.exists && m.data()?.isOp === true;
+}
+
 async function isBanned(uid?: string, nick?: string): Promise<boolean> {
   if (uid) {
     const byUid = await db.collection("bans").doc(uid).get();
@@ -605,8 +619,26 @@ export const onMemberJoin = onDocumentCreated(
     const snap = event.data;
     if (!snap) return;
     const data = snap.data();
-    if (data?.isOp === true) return;
     const channelId = event.params.channelId;
+    const uid = event.params.uid;
+
+    // Locked (invite-only) channel: bounce anyone who isn't invited.
+    const chan = await db.collection("channels").doc(channelId).get();
+    if (chan.exists && chan.data()?.locked === true) {
+      const inv = await db
+        .collection("channels")
+        .doc(channelId)
+        .collection("invites")
+        .doc(uid)
+        .get();
+      if (!inv.exists) {
+        await snap.ref.delete();
+        logger.info(`bounced ${uid} from locked #${channelId}`);
+        return;
+      }
+    }
+
+    if (data?.isOp === true) return;
     const ops = await db
       .collection("channels")
       .doc(channelId)
@@ -640,9 +672,60 @@ export const adminCommand = onCall(
     }
     const args = data.args || {};
 
+    // Channel moderation requires being an operator of THAT channel (become one
+    // first with /opme). The password alone isn't enough.
+    const CHANNEL_OP_ACTIONS = new Set([
+      "kick",
+      "ban",
+      "unban",
+      "mute",
+      "unmute",
+      "voice",
+      "devoice",
+      "op",
+      "deop",
+      "channel.mute",
+      "channel.unmute",
+      "channel.lock",
+      "channel.unlock",
+      "channel.invite",
+      "channel.uninvite",
+    ]);
+    if (CHANNEL_OP_ACTIONS.has(data.action || "")) {
+      if (!(await isChannelOp(args.byUid, args.channelId))) {
+        throw new HttpsError(
+          "permission-denied",
+          "Devi essere operatore di questo canale (usa /opme)."
+        );
+      }
+    }
+
     switch (data.action) {
       case "verify":
         return { ok: true };
+
+      case "opself": {
+        if (!args.channelId || !args.byUid)
+          throw new HttpsError("invalid-argument", "parametri mancanti");
+        await db
+          .collection("channels")
+          .doc(args.channelId)
+          .collection("members")
+          .doc(args.byUid)
+          .set({ isOp: true }, { merge: true });
+        // auto-invite so the op can always enter if the channel gets locked
+        await db
+          .collection("channels")
+          .doc(args.channelId)
+          .collection("invites")
+          .doc(args.byUid)
+          .set({ nick: args.nick || "", at: FieldValue.serverTimestamp() });
+        await channelNotice(
+          args.channelId,
+          `${args.nick || "un utente"} è ora operatore del canale`
+        );
+        return { ok: true };
+      }
 
       case "bot.enable":
       case "bot.disable": {
@@ -900,6 +983,14 @@ export const adminCommand = onCall(
           .collection("members")
           .doc(args.uid)
           .set({ isOp: grant }, { merge: true });
+        if (grant) {
+          await db
+            .collection("channels")
+            .doc(args.channelId)
+            .collection("invites")
+            .doc(args.uid)
+            .set({ nick: args.nick || "", at: FieldValue.serverTimestamp() });
+        }
         await channelNotice(
           args.channelId,
           grant
@@ -984,6 +1075,14 @@ export const adminCommand = onCall(
           .collection("channels")
           .doc(args.channelId)
           .set({ locked }, { merge: true });
+        if (locked && args.byUid) {
+          await db
+            .collection("channels")
+            .doc(args.channelId)
+            .collection("invites")
+            .doc(args.byUid)
+            .set({ nick: "", at: FieldValue.serverTimestamp() });
+        }
         await channelNotice(
           args.channelId,
           locked

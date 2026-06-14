@@ -394,6 +394,14 @@ export function subscribeDmThreads(
   });
 }
 
+export async function isInvited(
+  channelId: string,
+  uid: string
+): Promise<boolean> {
+  const snap = await getDoc(doc(db(), "channels", channelId, "invites", uid));
+  return snap.exists();
+}
+
 // ── Bots ──────────────────────────────────────────────────────────────────────
 // Live list of enabled bots from the /bots registry (public-read). The UI shows
 // these as members of the channels they operate in.
