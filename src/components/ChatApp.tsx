@@ -1043,13 +1043,15 @@ export default function ChatApp() {
           <span className="app-status"> ● online</span>
         </div>
 
-        <button
-          className="app-menu-btn app-menu-right"
-          onClick={() => setRightOpen(true)}
-          aria-label="Apri utenti"
-        >
-          ♟ {members.length + channelBots.length}
-        </button>
+        {!currentDm && (
+          <button
+            className="app-menu-btn app-menu-right"
+            onClick={() => setRightOpen(true)}
+            aria-label="Apri utenti"
+          >
+            ♟ {members.length + channelBots.length}
+          </button>
+        )}
       </header>
 
       {/* Three-column body */}
@@ -1093,17 +1095,19 @@ export default function ChatApp() {
           />
         </div>
 
-        <UserList
-          members={members}
-          bots={channelBots}
-          currentUserId={user.uid}
-          onUserClick={(uid, nick) => {
-            openDm(uid, nick);
-            setRightOpen(false);
-          }}
-          open={rightOpen}
-          onClose={() => setRightOpen(false)}
-        />
+        {!currentDm && (
+          <UserList
+            members={members}
+            bots={channelBots}
+            currentUserId={user.uid}
+            onUserClick={(uid, nick) => {
+              openDm(uid, nick);
+              setRightOpen(false);
+            }}
+            open={rightOpen}
+            onClose={() => setRightOpen(false)}
+          />
+        )}
       </div>
     </div>
   );
