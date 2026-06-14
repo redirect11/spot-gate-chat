@@ -224,3 +224,51 @@ export async function heartbeat(channelId: string, uid: string): Promise<void> {
     await setDoc(ref, { lastSeen: Date.now() }, { merge: true });
   }
 }
+
+// ── mIRC-style command helpers ────────────────────────────────────────────────
+export async function setChannelTopic(
+  channelId: string,
+  topic: string
+): Promise<void> {
+  await setDoc(
+    doc(db(), "channels", channelId),
+    { topic: topic || "No topic set" },
+    { merge: true }
+  );
+}
+
+export async function sendActionMessage(
+  channelId: string,
+  user: User,
+  text: string
+): Promise<void> {
+  await addDoc(collection(db(), "channels", channelId, "messages"), {
+    userId: user.uid,
+    nickname: user.nickname,
+    nickColor: user.nickColor,
+    text,
+    timestamp: serverTimestamp(),
+    type: "action",
+  });
+}
+
+export async function renameMember(
+  channelId: string,
+  uid: string,
+  nickname: string,
+  nickColor: string
+): Promise<void> {
+  const ref = doc(db(), "channels", channelId, "members", uid);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await setDoc(ref, { nickname, nickColor }, { merge: true });
+  }
+}
+
+// Public wrapper to post a "*** …" system line to a channel.
+export async function announce(
+  channelId: string,
+  text: string
+): Promise<void> {
+  await sendSystemMessage(channelId, text, "system");
+}

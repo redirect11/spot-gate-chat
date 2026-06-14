@@ -46,7 +46,7 @@ export default function MessageInput({ channelName, onSend, onTyping67th }: Prop
         className="msg-input"
         value={text}
         onChange={handleChange}
-        placeholder="Type a message... (type 67th for a surprise)"
+        placeholder="Scrivi un messaggio o /help per i comandi…"
         autoComplete="off"
         spellCheck={false}
         maxLength={500}

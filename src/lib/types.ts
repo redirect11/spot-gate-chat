@@ -13,7 +13,7 @@ export interface Message {
   nickColor: string;
   text: string;
   timestamp: number;
-  type: "message" | "join" | "leave" | "system";
+  type: "message" | "join" | "leave" | "system" | "action";
 }
 
 export interface ChannelMember {

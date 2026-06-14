@@ -365,6 +365,10 @@ body {
   color: var(--text-dim);
   font-style: italic;
 }
+.chat-line-action .chat-action-text {
+  color: var(--text-muted);
+  font-style: italic;
+}
 
 /* ── Message input bar ──────────────────────────────────────────────────────── */
 .msg-input-bar {

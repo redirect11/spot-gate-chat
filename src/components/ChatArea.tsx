@@ -55,6 +55,20 @@ export default function ChatArea({ messages, channelName, topic }: Props) {
             );
           }
 
+          if (msg.type === "action") {
+            return (
+              <div key={msg.id} className="chat-line chat-line-action">
+                <span className="chat-time">[{formatTime(msg.timestamp)}]</span>
+                <span className="chat-action-text">
+                  {" "}
+                  *{" "}
+                  <span style={{ color: msg.nickColor }}>{msg.nickname}</span>{" "}
+                  {msg.text}
+                </span>
+              </div>
+            );
+          }
+
           return (
             <div key={msg.id} className="chat-line">
               <span className="chat-time">[{formatTime(msg.timestamp)}]</span>

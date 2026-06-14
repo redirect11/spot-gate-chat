@@ -14,6 +14,10 @@ import {
   leaveChannel,
   createChannel,
   heartbeat,
+  setChannelTopic,
+  sendActionMessage,
+  renameMember,
+  announce,
 } from "@/lib/firestore";
 import { Channel, ChannelMember, Message, User } from "@/lib/types";
 
@@ -70,6 +74,10 @@ export default function ChatApp() {
   // Mobile off-canvas drawers (ignored on desktop where panels are always shown)
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
+  // Local-only notices (/help, /list, /names, unknown command) + /clear cutoff
+  const [localNotices, setLocalNotices] = useState<Message[]>([]);
+  const [clearedAt, setClearedAt] = useState(0);
+  const noticeSeq = useRef(0);
 
   // Refs for cleanup
   const channelUnsub = useRef<(() => void) | null>(null);
@@ -159,6 +167,8 @@ export default function ChatApp() {
 
     setMessages([]);
     setMembers([]);
+    setLocalNotices([]);
+    setClearedAt(0);
 
     // Join new channel — guard so a re-run for the same channel doesn't
     // produce a duplicate join message.
@@ -210,8 +220,133 @@ export default function ChatApp() {
     setUser(u);
   };
 
+  const HELP_TEXT =
+    "Comandi: /help · /nick <nome> · /me <azione> · /join #canale · " +
+    "/part · /topic <testo> · /list · /names · /clear · /quit";
+
+  const pushNotice = useCallback((text: string) => {
+    setLocalNotices((prev) => [
+      ...prev,
+      {
+        id: `local_${Date.now()}_${noticeSeq.current++}`,
+        userId: "system",
+        nickname: "***",
+        nickColor: "#8b949e",
+        text,
+        timestamp: Date.now(),
+        type: "system",
+      },
+    ]);
+  }, []);
+
+  const changeNick = async (raw: string) => {
+    if (!user) return;
+    const nick = raw.trim().replace(/\s+/g, "_").slice(0, 20);
+    if (!nick) {
+      pushNotice("Uso: /nick <nuovo_nome>");
+      return;
+    }
+    if (nick === user.nickname) return;
+    const nickColor = getNickColor(nick);
+    const old = user.nickname;
+    const updated: User = { ...user, nickname: nick, nickColor };
+    safeSetItem(STORAGE_KEY, JSON.stringify(updated));
+    await renameMember(currentChannelId, user.uid, nick, nickColor).catch(
+      () => {}
+    );
+    await announce(
+      currentChannelId,
+      `${old} ora è conosciuto come ${nick}`
+    ).catch(() => {});
+    setUser(updated);
+  };
+
+  const handleQuit = async () => {
+    if (user && prevChannelRef.current) {
+      await leaveChannel(prevChannelRef.current, user).catch(() => {});
+    }
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    joinedChannelRef.current = null;
+    prevChannelRef.current = null;
+    setUser(null);
+  };
+
+  const handleCommand = async (raw: string) => {
+    if (!user) return;
+    const body = raw.slice(1).trim();
+    const parts = body.split(/\s+/);
+    const cmd = (parts.shift() || "").toLowerCase();
+    const arg = body.slice(cmd.length).trim();
+
+    switch (cmd) {
+      case "help":
+        pushNotice(HELP_TEXT);
+        break;
+      case "me":
+        if (arg) await sendActionMessage(currentChannelId, user, arg).catch(() => {});
+        else pushNotice("Uso: /me <azione>");
+        break;
+      case "nick":
+        await changeNick(arg);
+        break;
+      case "join": {
+        const name = (parts[0] || arg).replace(/^#+/, "");
+        if (name) await handleCreateChannel(name, "");
+        else pushNotice("Uso: /join #canale");
+        break;
+      }
+      case "part":
+      case "leave":
+        if (currentChannelId !== "general") setCurrentChannelId("general");
+        else pushNotice("Sei già in #general");
+        break;
+      case "topic":
+        if (arg) {
+          await setChannelTopic(currentChannelId, arg).catch(() => {});
+          await announce(
+            currentChannelId,
+            `${user.nickname} ha cambiato il topic in: ${arg}`
+          ).catch(() => {});
+        } else {
+          pushNotice("Uso: /topic <testo>");
+        }
+        break;
+      case "list":
+        pushNotice(
+          channels.length
+            ? "Canali: " + channels.map((c) => c.name).join(", ")
+            : "Nessun canale."
+        );
+        break;
+      case "names":
+      case "users":
+        pushNotice(
+          `Utenti online (${members.length}): ` +
+            members.map((m) => m.nickname).join(", ")
+        );
+        break;
+      case "clear":
+        setClearedAt(Date.now());
+        setLocalNotices([]);
+        break;
+      case "quit":
+        await handleQuit();
+        break;
+      default:
+        pushNotice(`Comando sconosciuto: /${cmd} — scrivi /help`);
+    }
+  };
+
   const handleSend = async (text: string) => {
     if (!user) return;
+    if (text.startsWith("/")) {
+      await handleCommand(text);
+      return;
+    }
     try {
       await sendMessage(currentChannelId, user, text);
     } catch {
@@ -251,6 +386,11 @@ export default function ChatApp() {
 
   const currentChannel =
     channels.find((c) => c.id === currentChannelId) ?? null;
+
+  // Merge live messages with local-only notices, drop anything before /clear.
+  const displayMessages = [...messages, ...localNotices]
+    .filter((m) => m.timestamp > clearedAt)
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   return (
     <div className="app-root">
@@ -307,7 +447,7 @@ export default function ChatApp() {
 
         <div className="app-center">
           <ChatArea
-            messages={messages}
+            messages={displayMessages}
             channelName={currentChannel?.name ?? `#${currentChannelId}`}
             topic={currentChannel?.topic ?? ""}
           />
