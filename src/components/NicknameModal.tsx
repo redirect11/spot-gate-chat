@@ -63,6 +63,10 @@ export default function NicknameModal({ onConfirm }: Props) {
             </button>
           </form>
           <p className="modal-hint">Max 20 characters. No spaces.</p>
+          <p className="modal-hint">
+            Per la moderazione, nickname e una versione <em>hashata</em> del tuo
+            IP possono essere registrati temporaneamente. Entrando, accetti.
+          </p>
         </div>
       </div>
     </div>

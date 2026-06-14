@@ -21,6 +21,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   limit,
   serverTimestamp,
   Timestamp,
@@ -29,7 +30,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { getDb } from "./firebase";
-import { Channel, Message, ChannelMember, User, Bot } from "./types";
+import { Channel, Message, ChannelMember, User, Bot, DmThread } from "./types";
 
 function db() {
   return getDb();
@@ -197,6 +198,7 @@ export async function joinChannel(
     nickColor: user.nickColor,
     lastSeen: Date.now(),
     isOp: false,
+    voice: false,
   });
   await sendSystemMessage(
     channelId,
@@ -271,6 +273,96 @@ export async function announce(
   text: string
 ): Promise<void> {
   await sendSystemMessage(channelId, text, "system");
+}
+
+// ── Private messages (DMs) ────────────────────────────────────────────────────
+function dmId(a: string, b: string): string {
+  return [a, b].sort().join("__");
+}
+
+export async function sendDm(
+  me: User,
+  otherUid: string,
+  otherNick: string,
+  text: string
+): Promise<void> {
+  const id = dmId(me.uid, otherUid);
+  await setDoc(
+    doc(db(), "dms", id),
+    {
+      participants: [me.uid, otherUid].sort(),
+      nicks: { [me.uid]: me.nickname, [otherUid]: otherNick },
+      updatedAt: Date.now(),
+      lastFrom: me.uid,
+      lastText: text.slice(0, 120),
+    },
+    { merge: true }
+  );
+  await addDoc(collection(db(), "dms", id, "messages"), {
+    fromUid: me.uid,
+    fromNick: me.nickname,
+    fromColor: me.nickColor,
+    text,
+    timestamp: serverTimestamp(),
+  });
+}
+
+export function subscribeDmMessages(
+  convoId: string,
+  callback: (messages: Message[]) => void
+): () => void {
+  const q = query(
+    collection(db(), "dms", convoId, "messages"),
+    orderBy("timestamp", "asc"),
+    limit(200)
+  );
+  return onSnapshot(q, (snap) => {
+    const messages: Message[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        userId: data.fromUid ?? "",
+        nickname: data.fromNick ?? "unknown",
+        nickColor: data.fromColor ?? "#c9d1d9",
+        text: data.text ?? "",
+        timestamp:
+          data.timestamp instanceof Timestamp
+            ? data.timestamp.toMillis()
+            : data.timestamp ?? Date.now(),
+        type: "message",
+      };
+    });
+    callback(messages);
+  });
+}
+
+export function subscribeDmThreads(
+  myUid: string,
+  callback: (threads: DmThread[]) => void
+): () => void {
+  const q = query(
+    collection(db(), "dms"),
+    where("participants", "array-contains", myUid)
+  );
+  return onSnapshot(q, (snap) => {
+    const threads: DmThread[] = snap.docs
+      .map((d) => {
+        const data = d.data();
+        const other =
+          (data.participants as string[] | undefined)?.find(
+            (p) => p !== myUid
+          ) ?? "";
+        return {
+          convoId: d.id,
+          otherUid: other,
+          otherNick: (data.nicks ?? {})[other] ?? "?",
+          updatedAt: data.updatedAt ?? 0,
+          lastFrom: data.lastFrom ?? "",
+        };
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    callback(threads);
+  });
 }
 
 // ── Bots ──────────────────────────────────────────────────────────────────────

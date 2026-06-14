@@ -20,8 +20,11 @@ import {
   renameMember,
   announce,
   subscribeToBots,
+  sendDm,
+  subscribeDmMessages,
+  subscribeDmThreads,
 } from "@/lib/firestore";
-import { Bot, Channel, ChannelMember, Message, User } from "@/lib/types";
+import { Bot, Channel, ChannelMember, DmThread, Message, User } from "@/lib/types";
 import { notify, requestNotificationPermission } from "@/lib/notifications";
 import { COMMANDS, buildHelp } from "@/lib/commands";
 
@@ -92,6 +95,13 @@ export default function ChatApp() {
   // Operator (admin) state — password held in-session, re-checked server-side
   const [isAdmin, setIsAdmin] = useState(false);
   const adminPwdRef = useRef<string | null>(null);
+  // Private messages (DMs)
+  const [dmThreads, setDmThreads] = useState<DmThread[]>([]);
+  const [currentDm, setCurrentDm] = useState<{ uid: string; nick: string } | null>(null);
+  const [dmMessages, setDmMessages] = useState<Message[]>([]);
+  const dmSeen = useRef<Map<string, number>>(new Map()); // convoId -> last updatedAt seen
+  const currentDmRef = useRef<{ uid: string; nick: string } | null>(null);
+  currentDmRef.current = currentDm;
 
   // Refs for cleanup
   const channelUnsub = useRef<(() => void) | null>(null);
@@ -252,6 +262,57 @@ export default function ChatApp() {
     const unsub = subscribeToBots(setBots);
     return () => unsub();
   }, [user]);
+
+  // Record a salted IP hash (server-side) so bans can survive uid/nick changes.
+  useEffect(() => {
+    if (!user) return;
+    httpsCallable(getAppFunctions(), "recordPresence")({ uid: user.uid }).catch(
+      () => {}
+    );
+  }, [user]);
+
+  // DM threads (private message list) + notifications for new incoming DMs.
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeDmThreads(user.uid, (threads) => {
+      setDmThreads(threads);
+      for (const t of threads) {
+        const prev = dmSeen.current.get(t.convoId);
+        if (prev === undefined) {
+          dmSeen.current.set(t.convoId, t.updatedAt);
+          continue; // baseline — don't notify existing threads
+        }
+        if (t.updatedAt > prev) {
+          dmSeen.current.set(t.convoId, t.updatedAt);
+          const viewing = currentDmRef.current?.uid === t.otherUid;
+          if (t.lastFrom !== user.uid && !viewing) {
+            setUnread((u) => ({
+              ...u,
+              [`dm:${t.otherUid}`]: (u[`dm:${t.otherUid}`] || 0) + 1,
+            }));
+            if (typeof document !== "undefined" && document.hidden) {
+              notify(`@${t.otherNick}`, "Nuovo messaggio privato");
+            }
+          }
+        }
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  // Subscribe to the open DM's messages.
+  useEffect(() => {
+    if (!user || !currentDm) {
+      setDmMessages([]);
+      return;
+    }
+    const convoId = [user.uid, currentDm.uid].sort().join("__");
+    const unsub = subscribeDmMessages(convoId, setDmMessages);
+    setUnread((u) =>
+      u[`dm:${currentDm.uid}`] ? { ...u, [`dm:${currentDm.uid}`]: 0 } : u
+    );
+    return () => unsub();
+  }, [user, currentDm]);
 
   // Background-subscribe to every entered channel to detect new chat messages
   // (only real messages/actions from other people — not system/join/leave or
@@ -587,7 +648,9 @@ export default function ChatApp() {
       case "op":
       case "deop":
       case "mute":
-      case "unmute": {
+      case "unmute":
+      case "voice":
+      case "devoice": {
         if (!isAdmin) {
           pushNotice("Comando riservato agli operatori — /oper <password>");
           break;
@@ -612,6 +675,37 @@ export default function ChatApp() {
           });
         } catch {
           pushNotice(`Operazione /${cmd} fallita.`);
+        }
+        break;
+      }
+      case "msg":
+      case "query": {
+        const nick = parts[0];
+        const text = arg.slice((nick || "").length).trim();
+        if (!nick) {
+          pushNotice("Uso: /msg <nick> <testo>");
+          break;
+        }
+        const target = members.find(
+          (m) => m.nickname.toLowerCase() === nick.toLowerCase()
+        );
+        if (!target) {
+          pushNotice(
+            `Utente "${nick}" non presente in questo canale — apri un DM da chi è online.`
+          );
+          break;
+        }
+        if (target.userId === user.uid) {
+          pushNotice("Non puoi scriverti da solo.");
+          break;
+        }
+        openDm(target.userId, target.nickname);
+        if (text) {
+          try {
+            await sendDm(user, target.userId, target.nickname, text);
+          } catch {
+            pushNotice("Invio DM fallito.");
+          }
         }
         break;
       }
@@ -643,6 +737,14 @@ export default function ChatApp() {
       await handleCommand(text);
       return;
     }
+    if (currentDm) {
+      try {
+        await sendDm(user, currentDm.uid, currentDm.nick, text);
+      } catch {
+        console.error("Failed to send DM");
+      }
+      return;
+    }
     try {
       await sendMessage(currentChannelId, user, text);
     } catch {
@@ -652,7 +754,13 @@ export default function ChatApp() {
 
   const handleSelectChannel = useCallback((channelId: string) => {
     setCurrentChannelId(channelId);
+    setCurrentDm(null); // leaving DM view
     setLeftOpen(false); // close the drawer after picking a channel on mobile
+  }, []);
+
+  const openDm = useCallback((uid: string, nick: string) => {
+    setCurrentDm({ uid, nick });
+    setLeftOpen(false);
   }, []);
 
   const handleCreateChannel = async (name: string, topic: string) => {
@@ -692,6 +800,15 @@ export default function ChatApp() {
   const channelBots = bots.filter(
     (b) => b.channels?.includes("*") || b.channels?.includes(currentChannelId)
   );
+
+  // Active view: a channel, or a private conversation (DM).
+  const viewMessages = currentDm ? dmMessages : displayMessages;
+  const viewName = currentDm
+    ? `@${currentDm.nick}`
+    : currentChannel?.name ?? `#${currentChannelId}`;
+  const viewTopic = currentDm
+    ? "conversazione privata — visibile solo a voi due"
+    : currentChannel?.topic ?? "";
 
   return (
     <div className="app-root">
@@ -743,18 +860,21 @@ export default function ChatApp() {
           onSelect={handleSelectChannel}
           onCreateChannel={handleCreateChannel}
           unread={unread}
+          dmThreads={dmThreads}
+          activeDmUid={currentDm?.uid ?? null}
+          onSelectDm={openDm}
           open={leftOpen}
           onClose={() => setLeftOpen(false)}
         />
 
         <div className="app-center">
           <ChatArea
-            messages={displayMessages}
-            channelName={currentChannel?.name ?? `#${currentChannelId}`}
-            topic={currentChannel?.topic ?? ""}
+            messages={viewMessages}
+            channelName={viewName}
+            topic={viewTopic}
           />
           <MessageInput
-            channelName={currentChannel?.name ?? `#${currentChannelId}`}
+            channelName={viewName}
             onSend={handleSend}
             onTyping67th={() => setLogoTriggered(true)}
           />
@@ -764,6 +884,10 @@ export default function ChatApp() {
           members={members}
           bots={channelBots}
           currentUserId={user.uid}
+          onUserClick={(uid, nick) => {
+            openDm(uid, nick);
+            setRightOpen(false);
+          }}
           open={rightOpen}
           onClose={() => setRightOpen(false)}
         />

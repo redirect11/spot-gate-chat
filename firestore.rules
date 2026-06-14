@@ -50,6 +50,12 @@ service cloud.firestore {
               || (resource != null
                   && request.resource.data.isOp == resource.data.isOp)
             )
+            && (
+              !('voice' in request.resource.data)
+              || request.resource.data.voice == false
+              || (resource != null && 'voice' in resource.data
+                  && request.resource.data.voice == resource.data.voice)
+            )
           );
       }
 
@@ -71,6 +77,36 @@ service cloud.firestore {
     // rules). Not readable/writable by clients.
     match /bans/{id} {
       allow read, write: if false;
+    }
+
+    // IP map (uid -> salted IP hash) and IP bans — only the Cloud Functions
+    // touch these. Never exposed to clients.
+    match /ipmap/{uid} {
+      allow read, write: if false;
+    }
+    match /ipbans/{id} {
+      allow read, write: if false;
+    }
+
+    // Private messages (DMs). Note: without authenticated identities these are
+    // not cryptographically private — they're validated but readable by anyone
+    // who knows the conversation id. Casual privacy only.
+    match /dms/{convoId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(
+        ['participants', 'nicks', 'updatedAt', 'lastFrom', 'lastText']
+      );
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.fromNick is string
+          && request.resource.data.fromNick.size() <= 40;
+        allow update, delete: if false;
+      }
     }
   }
 }

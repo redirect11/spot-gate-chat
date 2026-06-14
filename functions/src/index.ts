@@ -22,9 +22,11 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { createHash } from "crypto";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 const ADMIN_PASSWORD = defineSecret("ADMIN_PASSWORD");
+const IP_SALT = defineSecret("IP_SALT");
 
 // Co-locate with the Firestore database (europe-west8 / Milan).
 setGlobalOptions({ region: "europe-west8", maxInstances: 10 });
@@ -82,6 +84,18 @@ export const onChatMessage = onDocumentCreated(
       return;
     }
 
+    // IP ban: drop messages from a uid whose recorded IP hash is banned.
+    const ipMap = await db.collection("ipmap").doc(msg.userId).get();
+    const ipHash = ipMap.exists ? (ipMap.data()?.ipHash as string) : null;
+    if (ipHash) {
+      const ipBan = await db.collection("ipbans").doc(ipHash).get();
+      if (ipBan.exists) {
+        await snap.ref.delete();
+        logger.info(`dropped message from IP-banned user in #${channelId}`);
+        return;
+      }
+    }
+
     // Per-channel mute: drop messages from a muted user.
     const muteSnap = await db
       .collection("channels")
@@ -94,7 +108,7 @@ export const onChatMessage = onDocumentCreated(
       return;
     }
 
-    // Moderated channel: only operators (and bots) may speak.
+    // Moderated channel: only operators, voiced users (and bots) may speak.
     const chanSnap = await db.collection("channels").doc(channelId).get();
     if (chanSnap.exists && chanSnap.data()?.muted === true) {
       const memberSnap = await db
@@ -103,8 +117,9 @@ export const onChatMessage = onDocumentCreated(
         .collection("members")
         .doc(msg.userId)
         .get();
-      const isOp = memberSnap.exists && memberSnap.data()?.isOp === true;
-      if (!isOp) {
+      const md = memberSnap.exists ? memberSnap.data() : null;
+      const privileged = md?.isOp === true || md?.voice === true;
+      if (!privileged) {
         await snap.ref.delete();
         return;
       }
@@ -307,6 +322,33 @@ async function channelNotice(channelId: string, text: string): Promise<void> {
   });
 }
 
+// Records a salted hash of the caller's IP, keyed by their client uid, so that
+// IP bans can survive a uid/nick change. Only the hash is stored (never the raw
+// IP). Called by the client on entry.
+export const recordPresence = onCall(
+  { region: "europe-west8", secrets: [IP_SALT] },
+  async (req) => {
+    const uid = (req.data || {})?.uid;
+    if (!uid || typeof uid !== "string") {
+      throw new HttpsError("invalid-argument", "uid mancante");
+    }
+    const fwd = req.rawRequest.headers["x-forwarded-for"];
+    const ip =
+      (Array.isArray(fwd) ? fwd[0] : (fwd || "").split(",")[0]).trim() ||
+      req.rawRequest.ip ||
+      "";
+    const ipHash = createHash("sha256")
+      .update(`${IP_SALT.value()}|${ip}`)
+      .digest("hex")
+      .slice(0, 32);
+    await db
+      .collection("ipmap")
+      .doc(uid)
+      .set({ ipHash, at: FieldValue.serverTimestamp() }, { merge: true });
+    return { ok: true };
+  }
+);
+
 // First person to enter a channel (when no operator is present) becomes its
 // operator — classic IRC behaviour. Op status is set here by the admin SDK so
 // clients can't grant it to themselves (security rules forbid that).
@@ -413,6 +455,18 @@ export const adminCommand = onCall(
             nick: args.nick || "",
             bannedAt: FieldValue.serverTimestamp(),
           });
+        // also ban the user's recorded IP hash, if known (stickier ban)
+        if (args.uid) {
+          const ipm = await db.collection("ipmap").doc(args.uid).get();
+          const ipHash = ipm.exists ? (ipm.data()?.ipHash as string) : null;
+          if (ipHash) {
+            await db.collection("ipbans").doc(ipHash).set({
+              uid: args.uid,
+              nick: args.nick || "",
+              bannedAt: FieldValue.serverTimestamp(),
+            });
+          }
+        }
         // remove from the channel + wipe their recent messages there
         if (args.channelId && args.uid) {
           await db
@@ -466,6 +520,16 @@ export const adminCommand = onCall(
           byNick.docs.forEach((d) => batch.delete(d.ref));
           await batch.commit();
         }
+        // also lift any IP ban tied to this nick
+        const ipByNick = await db
+          .collection("ipbans")
+          .where("nick", "==", ident)
+          .get();
+        if (!ipByNick.empty) {
+          const batch = db.batch();
+          ipByNick.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
         return { ok: true };
       }
 
@@ -485,6 +549,26 @@ export const adminCommand = onCall(
           grant
             ? `${args.nick || "un utente"} è ora operatore`
             : `${args.nick || "un utente"} non è più operatore`
+        );
+        return { ok: true };
+      }
+
+      case "voice":
+      case "devoice": {
+        if (!args.channelId || !args.uid)
+          throw new HttpsError("invalid-argument", "parametri mancanti");
+        const grant = data.action === "voice";
+        await db
+          .collection("channels")
+          .doc(args.channelId)
+          .collection("members")
+          .doc(args.uid)
+          .set({ voice: grant }, { merge: true });
+        await channelNotice(
+          args.channelId,
+          grant
+            ? `${args.nick || "un utente"} ha ora la parola (voice +)`
+            : `${args.nick || "un utente"} non ha più la parola`
         );
         return { ok: true };
       }

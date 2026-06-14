@@ -22,6 +22,15 @@ export interface ChannelMember {
   nickColor: string;
   lastSeen: number;
   isOp: boolean;
+  voice?: boolean;
+}
+
+export interface DmThread {
+  convoId: string;
+  otherUid: string;
+  otherNick: string;
+  updatedAt: number;
+  lastFrom: string;
 }
 
 export interface User {

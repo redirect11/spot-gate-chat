@@ -517,6 +517,9 @@ body {
 .user-item:hover {
   background: rgba(255,255,255,0.04);
 }
+.user-item-click {
+  cursor: pointer;
+}
 
 .user-sigil {
   color: var(--text-dim);

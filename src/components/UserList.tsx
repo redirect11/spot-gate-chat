@@ -7,6 +7,7 @@ interface Props {
   members: ChannelMember[];
   bots?: Bot[];
   currentUserId: string;
+  onUserClick?: (uid: string, nick: string) => void;
   open?: boolean;
   onClose?: () => void;
 }
@@ -15,29 +16,42 @@ export default function UserList({
   members,
   bots = [],
   currentUserId,
+  onUserClick,
   open = false,
   onClose,
 }: Props) {
   const ops = members.filter((m) => m.isOp);
-  const regular = members.filter((m) => !m.isOp);
+  const voiced = members.filter((m) => !m.isOp && m.voice);
+  const normal = members.filter((m) => !m.isOp && !m.voice);
 
-  const renderMember = (m: ChannelMember) => (
-    <li key={m.userId} className="user-item" title={m.nickname}>
-      <span className="user-sigil">{m.isOp ? "@" : "+"}</span>
-      <span className="user-nick" style={{ color: m.nickColor }}>
-        {m.nickname}
-        {m.userId === currentUserId && <span className="user-you"> (you)</span>}
-      </span>
-    </li>
-  );
+  const renderMember = (m: ChannelMember, sigil: string) => {
+    const isSelf = m.userId === currentUserId;
+    return (
+      <li
+        key={m.userId}
+        className={`user-item${!isSelf && onUserClick ? " user-item-click" : ""}`}
+        title={isSelf ? m.nickname : `${m.nickname} — clicca per messaggio privato`}
+        onClick={
+          !isSelf && onUserClick
+            ? () => onUserClick(m.userId, m.nickname)
+            : undefined
+        }
+      >
+        <span className="user-sigil">{sigil}</span>
+        <span className="user-nick" style={{ color: m.nickColor }}>
+          {m.nickname}
+          {isSelf && <span className="user-you"> (you)</span>}
+        </span>
+      </li>
+    );
+  };
 
   const total = members.length + bots.length;
 
   return (
     <aside className={`user-list${open ? " panel--open" : ""}`}>
       <div className="panel-header">
-        Users{" "}
-        <span className="user-count">{total}</span>
+        Users <span className="user-count">{total}</span>
         <button className="drawer-close" onClick={onClose} aria-label="Chiudi">
           ✕
         </button>
@@ -63,14 +77,21 @@ export default function UserList({
       {ops.length > 0 && (
         <>
           <div className="user-group-label">@ Operators</div>
-          <ul className="user-items">{ops.map(renderMember)}</ul>
+          <ul className="user-items">{ops.map((m) => renderMember(m, "@"))}</ul>
         </>
       )}
 
-      {regular.length > 0 && (
+      {voiced.length > 0 && (
         <>
-          <div className="user-group-label">+ Users</div>
-          <ul className="user-items">{regular.map(renderMember)}</ul>
+          <div className="user-group-label">+ Voice</div>
+          <ul className="user-items">{voiced.map((m) => renderMember(m, "+"))}</ul>
+        </>
+      )}
+
+      {normal.length > 0 && (
+        <>
+          <div className="user-group-label">Users</div>
+          <ul className="user-items">{normal.map((m) => renderMember(m, "·"))}</ul>
         </>
       )}
 

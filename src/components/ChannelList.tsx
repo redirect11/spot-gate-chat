@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Channel } from "@/lib/types";
+import { Channel, DmThread } from "@/lib/types";
 
 interface Props {
   channels: Channel[];
@@ -9,6 +9,9 @@ interface Props {
   onSelect: (channelId: string) => void;
   onCreateChannel: (name: string, topic: string) => void;
   unread?: Record<string, number>;
+  dmThreads?: DmThread[];
+  activeDmUid?: string | null;
+  onSelectDm?: (uid: string, nick: string) => void;
   open?: boolean;
   onClose?: () => void;
 }
@@ -19,6 +22,9 @@ export default function ChannelList({
   onSelect,
   onCreateChannel,
   unread = {},
+  dmThreads = [],
+  activeDmUid = null,
+  onSelectDm,
   open = false,
   onClose,
 }: Props) {
@@ -49,7 +55,11 @@ export default function ChannelList({
         {channels.map((ch) => (
           <li
             key={ch.id}
-            className={`channel-item${ch.id === currentChannelId ? " channel-item-active" : ""}`}
+            className={`channel-item${
+              ch.id === currentChannelId && !activeDmUid
+                ? " channel-item-active"
+                : ""
+            }`}
             onClick={() => onSelect(ch.id)}
             title={ch.topic}
           >
@@ -64,6 +74,32 @@ export default function ChannelList({
           </li>
         ))}
       </ul>
+
+      {dmThreads.length > 0 && (
+        <>
+          <div className="panel-header">✉️ Privati</div>
+          <ul className="channel-items">
+            {dmThreads.map((t) => (
+              <li
+                key={t.convoId}
+                className={`channel-item${
+                  t.otherUid === activeDmUid ? " channel-item-active" : ""
+                }`}
+                onClick={() => onSelectDm?.(t.otherUid, t.otherNick)}
+                title={t.otherNick}
+              >
+                <span className="channel-name">@{t.otherNick}</span>
+                {unread[`dm:${t.otherUid}`] > 0 &&
+                  t.otherUid !== activeDmUid && (
+                    <span className="channel-unread">
+                      {unread[`dm:${t.otherUid}`]}
+                    </span>
+                  )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       <div className="channel-new-section">
         {!showNew ? (
