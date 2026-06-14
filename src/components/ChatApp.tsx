@@ -893,6 +893,23 @@ export default function ChatApp() {
         }
         break;
       }
+      case "purge":
+      case "clearchat": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        if (currentDm) {
+          pushNotice("Usa /purge in un canale.");
+          break;
+        }
+        try {
+          await adminCall("channel.purge", { channelId: currentChannelId });
+        } catch {
+          pushNotice("Operazione fallita (sei op di questo canale? /opme).");
+        }
+        break;
+      }
       case "lock":
       case "unlock": {
         if (!isAdmin) {

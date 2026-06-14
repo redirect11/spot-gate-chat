@@ -690,6 +690,7 @@ export const adminCommand = onCall(
       "channel.unlock",
       "channel.invite",
       "channel.uninvite",
+      "channel.purge",
     ]);
     if (CHANNEL_OP_ACTIONS.has(data.action || "")) {
       if (!(await isChannelOp(args.byUid, args.channelId))) {
@@ -1088,6 +1089,22 @@ export const adminCommand = onCall(
           locked
             ? "🔒 Canale chiuso: solo gli invitati possono scrivere"
             : "🔓 Canale riaperto"
+        );
+        return { ok: true };
+      }
+
+      case "channel.purge": {
+        if (!args.channelId)
+          throw new HttpsError("invalid-argument", "channelId mancante");
+        await db.recursiveDelete(
+          db
+            .collection("channels")
+            .doc(args.channelId)
+            .collection("messages")
+        );
+        await channelNotice(
+          args.channelId,
+          "🧹 Chat ripulita da un operatore"
         );
         return { ok: true };
       }

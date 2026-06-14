@@ -36,6 +36,7 @@ export const COMMANDS: ChatCommand[] = [
   { name: "unlock", usage: "/unlock", desc: "Riapri il canale", op: true },
   { name: "invite", usage: "/invite <nick>", desc: "Invita un utente nel canale chiuso", op: true },
   { name: "uninvite", usage: "/uninvite <nick>", desc: "Revoca l'invito", op: true },
+  { name: "purge", usage: "/purge", desc: "Cancella tutti i messaggi del canale", op: true },
   { name: "opme", usage: "/opme", desc: "Diventa operatore (@) di questo canale", op: true },
   { name: "newbot", usage: "/newbot <id> <nick> [persona|moderator]", desc: "Crea un nuovo bot AI", op: true },
   { name: "addbot", usage: "/addbot <bot-id>", desc: "Invita un bot in questo canale", op: true },
