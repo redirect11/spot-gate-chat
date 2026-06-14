@@ -7,8 +7,11 @@
  * syncing a bots/*.json file into Firestore (see scripts/deploy-bots.mjs);
  * the code here never changes when you add or tweak a bot.
  *
- * This first version implements the "moderator" role only. Persona bots
- * (reply-as-a-user) plug into the same loop later.
+ * Two roles:
+ *  - "moderator": classifies each message (allow/delete/warn) and acts. Invisible
+ *    unless it removes/warns. Cheap model (Haiku) + structured output.
+ *  - "persona":   a visible chat participant. When triggered (mention/keyword),
+ *    it generates a reply with Claude and posts it as a normal message.
  */
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
@@ -27,6 +30,11 @@ setGlobalOptions({ region: "europe-west8", maxInstances: 10 });
 initializeApp();
 const db = getFirestore();
 
+interface BotTrigger {
+  type: "mention" | "keyword" | "all";
+  keywords?: string[];
+}
+
 interface BotConfig {
   id: string;
   enabled: boolean;
@@ -37,10 +45,12 @@ interface BotConfig {
   model: string;
   systemPrompt: string;
   contextWindow?: number;
-  actions?: Array<"delete" | "warn">;
+  actions?: Array<"delete" | "warn">; // moderator
+  trigger?: BotTrigger; // persona
+  maxReplyTokens?: number; // persona
 }
 
-// Structured verdict — guaranteed JSON shape, no fragile parsing.
+// Structured verdict for moderators — guaranteed JSON shape, no parsing.
 const Verdict = z.object({
   action: z.enum(["allow", "delete", "warn"]),
   reason: z.string(),
@@ -57,8 +67,8 @@ export const onChatMessage = onDocumentCreated(
     const msg = snap.data();
     const channelId = event.params.channelId;
 
-    // Only moderate real user messages — skip system/join/leave and bot output
-    // (the latter prevents infinite loops when a bot writes a notice).
+    // Only act on real user messages — skip system/join/leave and bot output
+    // (the latter prevents infinite loops).
     if (!msg || typeof msg.text !== "string") return;
     if (msg.type !== "message") return;
     if (typeof msg.userId === "string" && msg.userId.startsWith("bot:")) return;
@@ -70,23 +80,19 @@ export const onChatMessage = onDocumentCreated(
 
     const bots = botsSnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Omit<BotConfig, "id">) }))
-      .filter((b) => b.role === "moderator")
       .filter(
-        (b) =>
-          b.channels?.includes("*") || b.channels?.includes(channelId)
+        (b) => b.channels?.includes("*") || b.channels?.includes(channelId)
       );
 
     if (bots.length === 0) return;
 
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
 
-    for (const bot of bots) {
+    // ── Moderation first ────────────────────────────────────────────────────
+    let deleted = false;
+    for (const bot of bots.filter((b) => b.role === "moderator")) {
       try {
-        const context = await recentContext(
-          channelId,
-          bot.contextWindow ?? 12
-        );
-
+        const context = await recentContext(channelId, bot.contextWindow ?? 12);
         const res = await client.messages.parse({
           model: bot.model || "claude-haiku-4-5",
           max_tokens: 256,
@@ -94,7 +100,6 @@ export const onChatMessage = onDocumentCreated(
             {
               type: "text",
               text: bot.systemPrompt,
-              // Cache the (stable) system prompt → near-zero cost per message.
               cache_control: { type: "ephemeral" },
             },
           ],
@@ -109,12 +114,9 @@ export const onChatMessage = onDocumentCreated(
           ],
           output_config: { format: zodOutputFormat(Verdict) },
         });
-
         const verdict = res.parsed_output;
         if (!verdict || verdict.action === "allow") continue;
-
         const allowed = bot.actions ?? ["delete", "warn"];
-
         if (verdict.action === "delete" && allowed.includes("delete")) {
           await snap.ref.delete();
           await postSystemNotice(
@@ -122,28 +124,76 @@ export const onChatMessage = onDocumentCreated(
             bot,
             `message from ${msg.nickname} removed — ${verdict.reason}`
           );
-          logger.info(`[${bot.id}] deleted message in #${channelId}`, {
-            reason: verdict.reason,
-          });
-          return; // stop after a delete
+          deleted = true;
+          logger.info(`[${bot.id}] deleted message in #${channelId}`);
+          break;
         }
-
         if (verdict.action === "warn" && allowed.includes("warn")) {
           await postSystemNotice(
             channelId,
             bot,
             `${msg.nickname}: ${verdict.reason}`
           );
-          logger.info(`[${bot.id}] warned in #${channelId}`, {
-            reason: verdict.reason,
-          });
         }
       } catch (err) {
         logger.error(`[${bot.id}] moderation failed`, err);
       }
     }
+
+    if (deleted) return; // don't let personas reply to a removed message
+
+    // ── Persona replies ─────────────────────────────────────────────────────
+    for (const bot of bots.filter((b) => b.role === "persona")) {
+      try {
+        if (!triggerMatches(bot, msg.text)) continue;
+        const context = await recentContext(channelId, bot.contextWindow ?? 10);
+        const res = await client.messages.create({
+          model: bot.model || "claude-sonnet-4-6",
+          max_tokens: bot.maxReplyTokens ?? 300,
+          system: [
+            {
+              type: "text",
+              text: bot.systemPrompt,
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content:
+                `Sei "${bot.nickname}" in una chat di gruppo nel canale ` +
+                `#${channelId}. Conversazione recente:\n${context}\n\n` +
+                `Rispondi all'ultimo messaggio di <${msg.nickname}>: ` +
+                `"${msg.text}"`,
+            },
+          ],
+        });
+        const reply = res.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("")
+          .trim();
+        if (reply) {
+          await postBotMessage(channelId, bot, reply);
+          logger.info(`[${bot.id}] replied in #${channelId}`);
+        }
+      } catch (err) {
+        logger.error(`[${bot.id}] persona reply failed`, err);
+      }
+    }
   }
 );
+
+function triggerMatches(bot: BotConfig, text: string): boolean {
+  const t = bot.trigger ?? { type: "mention" };
+  const lower = text.toLowerCase();
+  if (t.type === "all") return true;
+  if (t.type === "keyword") {
+    return (t.keywords ?? []).some((k) => lower.includes(k.toLowerCase()));
+  }
+  // default: mention by nickname
+  return lower.includes(bot.nickname.toLowerCase());
+}
 
 async function recentContext(
   channelId: string,
@@ -168,16 +218,27 @@ async function postSystemNotice(
   bot: BotConfig,
   text: string
 ): Promise<void> {
-  await db
-    .collection("channels")
-    .doc(channelId)
-    .collection("messages")
-    .add({
-      userId: `bot:${bot.id}`,
-      nickname: bot.nickname,
-      nickColor: bot.nickColor,
-      text,
-      timestamp: FieldValue.serverTimestamp(),
-      type: "system",
-    });
+  await db.collection("channels").doc(channelId).collection("messages").add({
+    userId: `bot:${bot.id}`,
+    nickname: bot.nickname,
+    nickColor: bot.nickColor,
+    text,
+    timestamp: FieldValue.serverTimestamp(),
+    type: "system",
+  });
+}
+
+async function postBotMessage(
+  channelId: string,
+  bot: BotConfig,
+  text: string
+): Promise<void> {
+  await db.collection("channels").doc(channelId).collection("messages").add({
+    userId: `bot:${bot.id}`,
+    nickname: bot.nickname,
+    nickColor: bot.nickColor,
+    text,
+    timestamp: FieldValue.serverTimestamp(),
+    type: "message",
+  });
 }
