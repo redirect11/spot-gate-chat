@@ -13,7 +13,7 @@
  *  - "persona":   a visible chat participant. When triggered (mention/keyword),
  *    it generates a reply with Claude and posts it as a normal message.
  */
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
@@ -373,25 +373,55 @@ const KEEP_CHANNELS = new Set([
   "events",
   "bots",
 ]);
+async function channelHasActiveMember(channelId: string): Promise<boolean> {
+  const now = Date.now();
+  const members = await db
+    .collection("channels")
+    .doc(channelId)
+    .collection("members")
+    .get();
+  return members.docs.some(
+    (m) => now - ((m.data().lastSeen as number) || 0) < 120000
+  );
+}
+
+async function removeChannelFromBots(channelId: string): Promise<void> {
+  const snap = await db
+    .collection("bots")
+    .where("channels", "array-contains", channelId)
+    .get();
+  if (snap.empty) return;
+  const batch = db.batch();
+  snap.docs.forEach((d) =>
+    batch.update(d.ref, { channels: FieldValue.arrayRemove(channelId) })
+  );
+  await batch.commit();
+}
+
+async function closeChannelIfEmpty(channelId: string): Promise<void> {
+  if (KEEP_CHANNELS.has(channelId)) return;
+  if (await channelHasActiveMember(channelId)) return;
+  await removeChannelFromBots(channelId);
+  await db.recursiveDelete(db.collection("channels").doc(channelId));
+  logger.info(`closed empty channel #${channelId}`);
+}
+
+// Immediate close: when a user leaves and no active member remains, free the
+// channel (bots "leave" too — the channel is removed from their list).
+export const onMemberLeave = onDocumentDeleted(
+  "channels/{channelId}/members/{uid}",
+  async (event) => {
+    await closeChannelIfEmpty(event.params.channelId);
+  }
+);
+
+// Safety net for abrupt tab-closes (no graceful leave): sweep stale channels.
 export const cleanupEmptyChannels = onSchedule(
   { schedule: "every 15 minutes", region: "europe-west1" },
   async () => {
-    const now = Date.now();
     const chans = await db.collection("channels").get();
     for (const ch of chans.docs) {
-      if (KEEP_CHANNELS.has(ch.id)) continue;
-      const members = await db
-        .collection("channels")
-        .doc(ch.id)
-        .collection("members")
-        .get();
-      const active = members.docs.some(
-        (m) => now - ((m.data().lastSeen as number) || 0) < 120000
-      );
-      if (!active) {
-        await db.recursiveDelete(ch.ref);
-        logger.info(`cleaned up empty channel #${ch.id}`);
-      }
+      await closeChannelIfEmpty(ch.id);
     }
   }
 );
