@@ -8,7 +8,7 @@ interface Props {
   onAnimationEnd: () => void;
 }
 
-const LETTERS = ["6", "7", "t", "h"];
+const LETTERS = ["6", "7", "t"];
 
 export default function Logo67th({ triggered, onAnimationEnd }: Props) {
   const [animating, setAnimating] = useState(false);
@@ -28,7 +28,7 @@ export default function Logo67th({ triggered, onAnimationEnd }: Props) {
   }, [triggered, onAnimationEnd]);
 
   return (
-    <span className="logo-67th" aria-label="67th">
+    <span className="logo-67th" aria-label="67t">
       {LETTERS.map((char, i) => (
         <span
           key={i}

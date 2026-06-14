@@ -40,7 +40,7 @@ export default function NicknameModal({ onConfirm }: Props) {
       <div className="modal-box">
         <div className="modal-header">
           <span className="modal-title-bar">
-            ■ 67th — Set your nickname
+            ■ 67t — Set your nickname
           </span>
         </div>
         <div className="modal-body">

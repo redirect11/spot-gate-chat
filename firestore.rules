@@ -39,10 +39,24 @@ service cloud.firestore {
 
       match /members/{uid} {
         allow read: if true;
-        // presence docs: bounded size, no arbitrary fields abuse
+        // presence docs: bounded size; clients may NOT grant themselves op —
+        // op is only set by the admin Cloud Functions (which bypass rules).
         allow write: if request.resource.data == null
-          || (request.resource.data.nickname is string
-              && request.resource.data.nickname.size() <= 40);
+          || (
+            request.resource.data.nickname is string
+            && request.resource.data.nickname.size() <= 40
+            && (
+              request.resource.data.isOp == false
+              || (resource != null
+                  && request.resource.data.isOp == resource.data.isOp)
+            )
+          );
+      }
+
+      // Mute list — managed only by the admin Cloud Function.
+      match /mutes/{uid} {
+        allow read: if true;
+        allow write: if false;
       }
     }
 
@@ -51,6 +65,12 @@ service cloud.firestore {
     match /bots/{botId} {
       allow read: if true;
       allow write: if false;
+    }
+
+    // Ban list — managed only by the admin Cloud Function (admin SDK bypasses
+    // rules). Not readable/writable by clients.
+    match /bans/{id} {
+      allow read, write: if false;
     }
   }
 }

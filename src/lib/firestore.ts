@@ -59,7 +59,7 @@ export function getNickColor(nick: string): string {
 
 // ── Default channels seed ─────────────────────────────────────────────────────
 const DEFAULT_CHANNELS: Omit<Channel, "memberCount">[] = [
-  { id: "general", name: "#general", topic: "Welcome to 67th 🎉", createdAt: Date.now() },
+  { id: "general", name: "#general", topic: "Welcome to 67t 🎉", createdAt: Date.now() },
   { id: "random", name: "#random", topic: "Off-topic, meme, chaos", createdAt: Date.now() },
   { id: "tech", name: "#tech", topic: "Dev talk & code snippets", createdAt: Date.now() },
   { id: "events", name: "#events", topic: "Annunci eventi e meetup", createdAt: Date.now() },

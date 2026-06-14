@@ -3,7 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "67th — mIRC-style chat",
+  title: "67t — mIRC-style chat",
   description: "Real-time mIRC-style chat, powered by Firebase",
 };
 

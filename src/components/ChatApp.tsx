@@ -23,6 +23,7 @@ import {
 } from "@/lib/firestore";
 import { Bot, Channel, ChannelMember, Message, User } from "@/lib/types";
 import { notify, requestNotificationPermission } from "@/lib/notifications";
+import { COMMANDS, buildHelp } from "@/lib/commands";
 
 import Logo67th from "./Logo67th";
 import NicknameModal from "./NicknameModal";
@@ -293,7 +294,7 @@ export default function ChatApp() {
     if (typeof document === "undefined") return;
     const total = Object.values(unread).reduce((a, b) => a + b, 0);
     document.title =
-      total > 0 ? `(${total}) 67th — mIRC-style chat` : "67th — mIRC-style chat";
+      total > 0 ? `(${total}) 67t — mIRC-style chat` : "67t — mIRC-style chat";
   }, [unread]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
@@ -313,10 +314,6 @@ export default function ChatApp() {
     safeSetItem(STORAGE_KEY, JSON.stringify(u));
     setUser(u);
   };
-
-  const HELP_TEXT =
-    "Comandi: /help · /nick <nome> · /me <azione> · /join #canale · " +
-    "/part · /topic <testo> · /list · /names · /clear · /quit";
 
   const pushNotice = useCallback((text: string) => {
     setLocalNotices((prev) => [
@@ -382,9 +379,20 @@ export default function ChatApp() {
     const arg = body.slice(cmd.length).trim();
 
     switch (cmd) {
-      case "help":
-        pushNotice(HELP_TEXT);
+      case "help": {
+        const which = parts[0]?.replace(/^\//, "").toLowerCase();
+        if (which) {
+          const c = COMMANDS.find((x) => x.name === which);
+          pushNotice(
+            c
+              ? `${c.usage} — ${c.desc}${c.op ? " (operatore)" : ""}`
+              : `Comando sconosciuto: /${which}`
+          );
+        } else {
+          pushNotice(buildHelp());
+        }
         break;
+      }
       case "me":
         if (arg) await sendActionMessage(currentChannelId, user, arg).catch(() => {});
         else pushNotice("Uso: /me <azione>");
@@ -529,6 +537,97 @@ export default function ChatApp() {
           });
         } catch {
           pushNotice("Kick fallito.");
+        }
+        break;
+      }
+      case "ban": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const nick = parts[0];
+        if (!nick) {
+          pushNotice("Uso: /ban <nick>");
+          break;
+        }
+        // ban works even if the user isn't currently in the member list
+        const target = members.find(
+          (m) => m.nickname.toLowerCase() === nick.toLowerCase()
+        );
+        try {
+          await adminCall("ban", {
+            channelId: currentChannelId,
+            uid: target?.userId ?? "",
+            nick: target?.nickname ?? nick,
+          });
+          pushNotice(`🔨 ${nick} bannato.`);
+        } catch {
+          pushNotice("Ban fallito.");
+        }
+        break;
+      }
+      case "unban": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const nick = parts[0];
+        if (!nick) {
+          pushNotice("Uso: /unban <nick>");
+          break;
+        }
+        try {
+          await adminCall("unban", { nick });
+          pushNotice(`${nick} sbannato.`);
+        } catch {
+          pushNotice("Unban fallito.");
+        }
+        break;
+      }
+      case "op":
+      case "deop":
+      case "mute":
+      case "unmute": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const nick = parts[0];
+        if (!nick) {
+          pushNotice(`Uso: /${cmd} <nick>`);
+          break;
+        }
+        const target = members.find(
+          (m) => m.nickname.toLowerCase() === nick.toLowerCase()
+        );
+        if (!target) {
+          pushNotice(`Utente "${nick}" non trovato in questo canale.`);
+          break;
+        }
+        try {
+          await adminCall(cmd, {
+            channelId: currentChannelId,
+            uid: target.userId,
+            nick: target.nickname,
+          });
+        } catch {
+          pushNotice(`Operazione /${cmd} fallita.`);
+        }
+        break;
+      }
+      case "mutechannel":
+      case "unmutechannel": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        try {
+          await adminCall(
+            cmd === "mutechannel" ? "channel.mute" : "channel.unmute",
+            { channelId: currentChannelId }
+          );
+        } catch {
+          pushNotice("Operazione fallita.");
         }
         break;
       }

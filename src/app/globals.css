@@ -377,6 +377,7 @@ body {
 .chat-line-system .chat-system-text {
   color: var(--text-dim);
   font-style: italic;
+  white-space: pre-wrap; /* multi-line /help output */
 }
 .chat-line-action .chat-action-text {
   color: var(--text-muted);
@@ -384,6 +385,46 @@ body {
 }
 
 /* ── Message input bar ──────────────────────────────────────────────────────── */
+.msg-input-wrap {
+  flex-shrink: 0;
+}
+
+.cmd-suggest {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 12px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+.cmd-suggest-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cmd-suggest-item:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.cmd-suggest-op {
+  font-size: 9px;
+  font-weight: bold;
+  color: #000;
+  background: var(--yellow);
+  border-radius: 6px;
+  padding: 0 4px;
+}
+
 .msg-input-bar {
   display: flex;
   align-items: center;
@@ -605,22 +646,20 @@ body {
 .logo-char {
   display: inline-block;
   position: relative;
-  transform-origin: 50% 90%;
-  /* idle wobble — each letter rocks side to side, slightly out of phase */
-  animation: logo-idle-wobble 1.6s ease-in-out infinite;
+  /* idle wave — each letter follows a vertical sine, phase-shifted so the
+     letters form a travelling wave (two half-sinusoids that invert). */
+  animation: logo-wave 1.4s ease-in-out infinite;
 }
 
 .logo-char-0 { animation-delay: 0s;    color: #ff6b6b; }
-.logo-char-1 { animation-delay: 0.15s; color: #ffa94d; }
-.logo-char-2 { animation-delay: 0.3s;  color: #ffd43b; }
-.logo-char-3 { animation-delay: 0.45s; color: #69db7c; }
+.logo-char-1 { animation-delay: 0.16s; color: #ffa94d; }
+.logo-char-2 { animation-delay: 0.32s; color: #ffd43b; }
+.logo-char-3 { animation-delay: 0.48s; color: #69db7c; }
 
-@keyframes logo-idle-wobble {
-  0%   { transform: rotate(-6deg) translateY(0); }
-  25%  { transform: rotate(0deg)  translateY(-2px); }
-  50%  { transform: rotate(6deg)  translateY(0); }
-  75%  { transform: rotate(0deg)  translateY(-2px); }
-  100% { transform: rotate(-6deg) translateY(0); }
+@keyframes logo-wave {
+  0%   { transform: translateY(-7px); }
+  50%  { transform: translateY(7px); }
+  100% { transform: translateY(-7px); }
 }
 
 /* Triggered by typing "67th" — each character has its own wild animation */
