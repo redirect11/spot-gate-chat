@@ -326,11 +326,10 @@ export const onMemberJoin = onDocumentCreated(
       .limit(1)
       .get();
     if (!ops.empty) return; // a channel operator already exists
+    // Promote silently — the @ badge in the user list already shows op status,
+    // and a chat notice here reads as a duplicate "join" line. Manual /op still
+    // announces (see the "op" admin action).
     await snap.ref.set({ isOp: true }, { merge: true });
-    await channelNotice(
-      channelId,
-      `${data?.nickname || "un utente"} è ora operatore del canale`
-    );
   }
 );
 
