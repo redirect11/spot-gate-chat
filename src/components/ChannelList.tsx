@@ -71,7 +71,10 @@ export default function ChannelList({
             onClick={() => onSelect(ch.id)}
             title={ch.topic}
           >
-            <span className="channel-name">{ch.name}</span>
+            <span className="channel-name">
+              {ch.locked ? "🔒 " : ""}
+              {ch.name}
+            </span>
             {unread[ch.id] > 0 && ch.id !== currentChannelId ? (
               <span className="channel-unread">{fmtUnread(unread[ch.id])}</span>
             ) : (

@@ -889,6 +889,60 @@ export default function ChatApp() {
         }
         break;
       }
+      case "lock":
+      case "unlock": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        if (currentDm) {
+          pushNotice("Usa /lock in un canale.");
+          break;
+        }
+        try {
+          await adminCall(cmd === "lock" ? "channel.lock" : "channel.unlock", {
+            channelId: currentChannelId,
+          });
+        } catch {
+          pushNotice("Operazione fallita.");
+        }
+        break;
+      }
+      case "invite":
+      case "uninvite": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        if (currentDm) {
+          pushNotice("Usa /invite in un canale.");
+          break;
+        }
+        const nick = parts[0];
+        if (!nick) {
+          pushNotice(`Uso: /${cmd} <nick>`);
+          break;
+        }
+        const target = members.find(
+          (m) => m.nickname.toLowerCase() === nick.toLowerCase()
+        );
+        try {
+          await adminCall(
+            cmd === "invite" ? "channel.invite" : "channel.uninvite",
+            {
+              channelId: currentChannelId,
+              nick,
+              uid: target?.userId ?? "",
+            }
+          );
+          pushNotice(
+            cmd === "invite" ? `${nick} invitato.` : `Invito a ${nick} revocato.`
+          );
+        } catch {
+          pushNotice(`Utente "${nick}" sconosciuto (deve aver scelto un nick).`);
+        }
+        break;
+      }
 
       default:
         pushNotice(`Comando sconosciuto: /${cmd} — scrivi /help`);

@@ -114,9 +114,11 @@ export const onChatMessage = onDocumentCreated(
       return;
     }
 
-    // Moderated channel: only operators, voiced users (and bots) may speak.
+    // Moderated channel (only op/voice may speak) and/or locked channel
+    // (only op/invited may speak). Bots already returned above.
     const chanSnap = await db.collection("channels").doc(channelId).get();
-    if (chanSnap.exists && chanSnap.data()?.muted === true) {
+    const chanData = chanSnap.exists ? chanSnap.data() : null;
+    if (chanData && (chanData.muted === true || chanData.locked === true)) {
       const memberSnap = await db
         .collection("channels")
         .doc(channelId)
@@ -124,10 +126,22 @@ export const onChatMessage = onDocumentCreated(
         .doc(msg.userId)
         .get();
       const md = memberSnap.exists ? memberSnap.data() : null;
-      const privileged = md?.isOp === true || md?.voice === true;
-      if (!privileged) {
+      const isOp = md?.isOp === true;
+      if (chanData.muted === true && !(isOp || md?.voice === true)) {
         await snap.ref.delete();
         return;
+      }
+      if (chanData.locked === true && !isOp) {
+        const inv = await db
+          .collection("channels")
+          .doc(channelId)
+          .collection("invites")
+          .doc(msg.userId)
+          .get();
+        if (!inv.exists) {
+          await snap.ref.delete();
+          return;
+        }
       }
     }
 
@@ -958,6 +972,55 @@ export const adminCommand = onCall(
             ? "Canale moderato: solo gli operatori possono scrivere"
             : "Canale non più moderato"
         );
+        return { ok: true };
+      }
+
+      case "channel.lock":
+      case "channel.unlock": {
+        if (!args.channelId)
+          throw new HttpsError("invalid-argument", "channelId mancante");
+        const locked = data.action === "channel.lock";
+        await db
+          .collection("channels")
+          .doc(args.channelId)
+          .set({ locked }, { merge: true });
+        await channelNotice(
+          args.channelId,
+          locked
+            ? "🔒 Canale chiuso: solo gli invitati possono scrivere"
+            : "🔓 Canale riaperto"
+        );
+        return { ok: true };
+      }
+
+      case "channel.invite":
+      case "channel.uninvite": {
+        if (!args.channelId || !args.nick)
+          throw new HttpsError("invalid-argument", "channelId e nick richiesti");
+        let uid = args.uid;
+        if (!uid) {
+          const n = await db
+            .collection("nicks")
+            .doc(args.nick.toLowerCase())
+            .get();
+          uid = n.exists ? (n.data()?.uid as string) : "";
+        }
+        if (!uid) throw new HttpsError("not-found", "utente sconosciuto");
+        const ref = db
+          .collection("channels")
+          .doc(args.channelId)
+          .collection("invites")
+          .doc(uid);
+        if (data.action === "channel.invite") {
+          await ref.set({ nick: args.nick, at: FieldValue.serverTimestamp() });
+          await channelNotice(args.channelId, `${args.nick} è stato invitato`);
+        } else {
+          await ref.delete().catch(() => {});
+          await channelNotice(
+            args.channelId,
+            `invito a ${args.nick} revocato`
+          );
+        }
         return { ok: true };
       }
 

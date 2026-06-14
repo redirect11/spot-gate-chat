@@ -4,6 +4,8 @@ export interface Channel {
   topic: string;
   memberCount: number;
   createdAt: number;
+  locked?: boolean;
+  muted?: boolean;
 }
 
 export interface Message {
