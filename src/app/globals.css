@@ -338,6 +338,40 @@ body {
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  position: relative;
+}
+
+/* ── Rotating pixel-art Earth (subtle chat background) ──────────────────────── */
+.earth-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.earth-globe {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='32'%3E%3Crect width='64' height='32' fill='%2315406e'/%3E%3Cg fill='%233fae5a'%3E%3Crect x='6' y='6' width='10' height='8'/%3E%3Crect x='14' y='10' width='6' height='8'/%3E%3Crect x='4' y='12' width='6' height='6'/%3E%3Crect x='26' y='14' width='8' height='10'/%3E%3Crect x='40' y='5' width='12' height='7'/%3E%3Crect x='46' y='12' width='6' height='8'/%3E%3Crect x='54' y='18' width='8' height='6'/%3E%3Crect x='20' y='22' width='8' height='6'/%3E%3C/g%3E%3Cg fill='%232e8b46'%3E%3Crect x='8' y='8' width='4' height='4'/%3E%3Crect x='28' y='16' width='4' height='4'/%3E%3Crect x='42' y='7' width='4' height='4'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 440px 100%;
+  image-rendering: pixelated;
+  opacity: 0.13;
+  box-shadow:
+    inset -26px -26px 50px rgba(0, 0, 0, 0.65),
+    inset 20px 20px 44px rgba(120, 180, 255, 0.22);
+  animation: earth-spin 22s linear infinite;
+}
+@keyframes earth-spin {
+  from { background-position-x: 0; }
+  to { background-position-x: -440px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .earth-globe { animation: none; }
 }
 
 .chat-topic-bar {
@@ -367,6 +401,8 @@ body {
   flex-direction: column;
   gap: 1px;
   min-height: 0;
+  position: relative;
+  z-index: 1; /* above the Earth background */
 }
 
 /* Scrollbar */

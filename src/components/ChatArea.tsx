@@ -37,6 +37,11 @@ export default function ChatArea({ messages, channelName, topic }: Props) {
         {topic && <span className="chat-topic-text"> — {topic}</span>}
       </div>
 
+      {/* Rotating pixel-art Earth — subtle background, behind the text */}
+      <div className="earth-bg" aria-hidden="true">
+        <div className="earth-globe" />
+      </div>
+
       {/* Messages */}
       <div className="chat-messages" ref={containerRef}>
         {messages.length === 0 && (
