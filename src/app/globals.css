@@ -228,6 +228,19 @@ body {
   flex-shrink: 0;
 }
 
+.channel-unread {
+  font-size: 10px;
+  font-weight: bold;
+  color: #fff;
+  background: var(--red);
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  flex-shrink: 0;
+  min-width: 16px;
+  text-align: center;
+}
+
 .channel-new-section {
   padding: 8px;
   border-top: 1px solid var(--border);

@@ -8,6 +8,7 @@ interface Props {
   currentChannelId: string;
   onSelect: (channelId: string) => void;
   onCreateChannel: (name: string, topic: string) => void;
+  unread?: Record<string, number>;
   open?: boolean;
   onClose?: () => void;
 }
@@ -17,6 +18,7 @@ export default function ChannelList({
   currentChannelId,
   onSelect,
   onCreateChannel,
+  unread = {},
   open = false,
   onClose,
 }: Props) {
@@ -52,8 +54,12 @@ export default function ChannelList({
             title={ch.topic}
           >
             <span className="channel-name">{ch.name}</span>
-            {ch.memberCount > 0 && (
-              <span className="channel-count">{ch.memberCount}</span>
+            {unread[ch.id] > 0 && ch.id !== currentChannelId ? (
+              <span className="channel-unread">{unread[ch.id]}</span>
+            ) : (
+              ch.memberCount > 0 && (
+                <span className="channel-count">{ch.memberCount}</span>
+              )
             )}
           </li>
         ))}

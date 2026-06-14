@@ -20,6 +20,7 @@ import {
   announce,
 } from "@/lib/firestore";
 import { Channel, ChannelMember, Message, User } from "@/lib/types";
+import { notify, requestNotificationPermission } from "@/lib/notifications";
 
 import Logo67th from "./Logo67th";
 import NicknameModal from "./NicknameModal";
@@ -78,6 +79,12 @@ export default function ChatApp() {
   const [localNotices, setLocalNotices] = useState<Message[]>([]);
   const [clearedAt, setClearedAt] = useState(0);
   const noticeSeq = useRef(0);
+  // Notifications: channels the user has entered + per-channel unread counts
+  const [joinedChannels, setJoinedChannels] = useState<string[]>(["general"]);
+  const [unread, setUnread] = useState<Record<string, number>>({});
+  const seenIds = useRef<Map<string, Set<string>>>(new Map());
+  const currentChannelIdRef = useRef(currentChannelId);
+  currentChannelIdRef.current = currentChannelId;
 
   // Refs for cleanup
   const channelUnsub = useRef<(() => void) | null>(null);
@@ -201,6 +208,67 @@ export default function ChatApp() {
       }
     };
   }, [user]);
+
+  // ── Notifications ─────────────────────────────────────────────────────────────
+  // Remember every channel the user enters, and clear its unread badge when it
+  // becomes the active channel.
+  useEffect(() => {
+    setJoinedChannels((prev) =>
+      prev.includes(currentChannelId) ? prev : [...prev, currentChannelId]
+    );
+    setUnread((prev) =>
+      prev[currentChannelId] ? { ...prev, [currentChannelId]: 0 } : prev
+    );
+  }, [currentChannelId]);
+
+  // Ask for browser-notification permission once the user is in.
+  useEffect(() => {
+    if (user) requestNotificationPermission();
+  }, [user]);
+
+  // Background-subscribe to every entered channel to detect new chat messages
+  // (only real messages/actions from other people — not system/join/leave or
+  // the user's own). Increments the unread badge and, when the tab is hidden,
+  // fires a browser notification. The active channel never notifies.
+  useEffect(() => {
+    if (!user) return;
+    const unsubs = joinedChannels.map((cid) =>
+      subscribeToMessages(cid, (msgs) => {
+        const seen = seenIds.current.get(cid);
+        if (!seen) {
+          // First snapshot for this channel = baseline; don't notify history.
+          seenIds.current.set(cid, new Set(msgs.map((m) => m.id)));
+          return;
+        }
+        const fresh = msgs.filter((m) => !seen.has(m.id));
+        fresh.forEach((m) => seen.add(m.id));
+        if (cid === currentChannelIdRef.current) return; // user is viewing it
+        const notifiable = fresh.filter(
+          (m) =>
+            (m.type === "message" || m.type === "action") &&
+            m.userId !== user.uid
+        );
+        if (notifiable.length === 0) return;
+        setUnread((prev) => ({
+          ...prev,
+          [cid]: (prev[cid] || 0) + notifiable.length,
+        }));
+        if (typeof document !== "undefined" && document.hidden) {
+          const last = notifiable[notifiable.length - 1];
+          notify(`#${cid}`, `<${last.nickname}> ${last.text}`);
+        }
+      })
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [user, joinedChannels]);
+
+  // Reflect total unread in the tab title.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const total = Object.values(unread).reduce((a, b) => a + b, 0);
+    document.title =
+      total > 0 ? `(${total}) 67th — mIRC-style chat` : "67th — mIRC-style chat";
+  }, [unread]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleNicknameConfirm = async (nickname: string) => {
@@ -441,6 +509,7 @@ export default function ChatApp() {
           currentChannelId={currentChannelId}
           onSelect={handleSelectChannel}
           onCreateChannel={handleCreateChannel}
+          unread={unread}
           open={leftOpen}
           onClose={() => setLeftOpen(false)}
         />
