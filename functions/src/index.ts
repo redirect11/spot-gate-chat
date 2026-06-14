@@ -14,6 +14,7 @@
  *    it generates a reply with Claude and posts it as a normal message.
  */
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { setGlobalOptions, logger } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
@@ -23,6 +24,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
+const ADMIN_PASSWORD = defineSecret("ADMIN_PASSWORD");
 
 // Co-locate with the Firestore database (europe-west8 / Milan).
 setGlobalOptions({ region: "europe-west8", maxInstances: 10 });
@@ -242,3 +244,77 @@ async function postBotMessage(
     type: "message",
   });
 }
+
+// ── Operator (admin) gatekeeper ──────────────────────────────────────────────
+// mIRC-style: the client sends an oper password with each privileged command;
+// this function verifies it against the ADMIN_PASSWORD secret and performs the
+// action with admin rights (bypassing security rules). Identity is the password
+// — there is no account system. Use a long, secret password.
+export const adminCommand = onCall(
+  { region: "europe-west8", secrets: [ADMIN_PASSWORD] },
+  async (req) => {
+    const data = (req.data || {}) as {
+      password?: string;
+      action?: string;
+      args?: Record<string, string>;
+    };
+    if (!data.password || data.password !== ADMIN_PASSWORD.value()) {
+      throw new HttpsError("permission-denied", "Password operatore errata");
+    }
+    const args = data.args || {};
+
+    switch (data.action) {
+      case "verify":
+        return { ok: true };
+
+      case "bot.enable":
+      case "bot.disable": {
+        if (!args.botId)
+          throw new HttpsError("invalid-argument", "botId mancante");
+        await db
+          .collection("bots")
+          .doc(args.botId)
+          .set({ enabled: data.action === "bot.enable" }, { merge: true });
+        return { ok: true };
+      }
+
+      case "bot.say": {
+        if (!args.botId || !args.channelId || !args.text)
+          throw new HttpsError("invalid-argument", "parametri mancanti");
+        const botSnap = await db.collection("bots").doc(args.botId).get();
+        if (!botSnap.exists)
+          throw new HttpsError("not-found", "bot inesistente");
+        const bot = botSnap.data() as BotConfig;
+        await postBotMessage(args.channelId, bot, String(args.text).slice(0, 500));
+        return { ok: true };
+      }
+
+      case "kick": {
+        if (!args.channelId || !args.uid)
+          throw new HttpsError("invalid-argument", "parametri mancanti");
+        await db
+          .collection("channels")
+          .doc(args.channelId)
+          .collection("members")
+          .doc(args.uid)
+          .delete();
+        await db
+          .collection("channels")
+          .doc(args.channelId)
+          .collection("messages")
+          .add({
+            userId: "system",
+            nickname: "***",
+            nickColor: "#8b949e",
+            text: `${args.nick || "un utente"} è stato espulso da un operatore`,
+            timestamp: FieldValue.serverTimestamp(),
+            type: "leave",
+          });
+        return { ok: true };
+      }
+
+      default:
+        throw new HttpsError("invalid-argument", "azione sconosciuta");
+    }
+  }
+);

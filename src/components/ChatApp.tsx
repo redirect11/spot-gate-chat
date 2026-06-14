@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { signInAnonymously } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { getFirebaseAuth, getAppFunctions } from "@/lib/firebase";
 import {
   getNickColor,
   initDefaultChannels,
@@ -87,6 +88,9 @@ export default function ChatApp() {
   const seenIds = useRef<Map<string, Set<string>>>(new Map());
   const currentChannelIdRef = useRef(currentChannelId);
   currentChannelIdRef.current = currentChannelId;
+  // Operator (admin) state — password held in-session, re-checked server-side
+  const [isAdmin, setIsAdmin] = useState(false);
+  const adminPwdRef = useRef<string | null>(null);
 
   // Refs for cleanup
   const channelUnsub = useRef<(() => void) | null>(null);
@@ -228,6 +232,19 @@ export default function ChatApp() {
     if (user) requestNotificationPermission();
   }, [user]);
 
+  // Restore operator status within the session (re-verified by the server on use).
+  useEffect(() => {
+    try {
+      const pwd = sessionStorage.getItem("67th_oper");
+      if (pwd) {
+        adminPwdRef.current = pwd;
+        setIsAdmin(true);
+      }
+    } catch {
+      /* sessionStorage unavailable */
+    }
+  }, []);
+
   // Live list of bots (shown as channel members).
   useEffect(() => {
     if (!user) return;
@@ -338,6 +355,11 @@ export default function ChatApp() {
     setUser(updated);
   };
 
+  const adminCall = async (action: string, args: Record<string, string>) => {
+    const fn = httpsCallable(getAppFunctions(), "adminCommand");
+    await fn({ password: adminPwdRef.current ?? "", action, args });
+  };
+
   const handleQuit = async () => {
     if (user && prevChannelRef.current) {
       await leaveChannel(prevChannelRef.current, user).catch(() => {});
@@ -413,6 +435,104 @@ export default function ChatApp() {
       case "quit":
         await handleQuit();
         break;
+
+      // ── Operator commands ──────────────────────────────────────────────────
+      case "oper": {
+        const pwd = arg.trim();
+        if (!pwd) {
+          pushNotice("Uso: /oper <password>");
+          break;
+        }
+        try {
+          const fn = httpsCallable(getAppFunctions(), "adminCommand");
+          await fn({ password: pwd, action: "verify" });
+          adminPwdRef.current = pwd;
+          setIsAdmin(true);
+          try {
+            sessionStorage.setItem("67th_oper", pwd);
+          } catch {
+            /* ignore */
+          }
+          pushNotice("✅ Sei ora operatore. Comandi: /botoff /boton /say /kick");
+        } catch {
+          pushNotice("❌ Password operatore errata.");
+        }
+        break;
+      }
+      case "boton":
+      case "botoff": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const id = parts[0];
+        if (!id) {
+          pushNotice(`Uso: /${cmd} <bot-id>`);
+          break;
+        }
+        try {
+          await adminCall(cmd === "boton" ? "bot.enable" : "bot.disable", {
+            botId: id,
+          });
+          pushNotice(
+            `Bot "${id}" ${cmd === "boton" ? "attivato" : "disattivato"}.`
+          );
+        } catch {
+          pushNotice("Operazione fallita.");
+        }
+        break;
+      }
+      case "say": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const id = parts[0];
+        const text = arg.slice((id || "").length).trim();
+        if (!id || !text) {
+          pushNotice("Uso: /say <bot-id> <testo>");
+          break;
+        }
+        try {
+          await adminCall("bot.say", {
+            botId: id,
+            channelId: currentChannelId,
+            text,
+          });
+        } catch {
+          pushNotice("Operazione fallita.");
+        }
+        break;
+      }
+      case "kick": {
+        if (!isAdmin) {
+          pushNotice("Comando riservato agli operatori — /oper <password>");
+          break;
+        }
+        const nick = parts[0];
+        if (!nick) {
+          pushNotice("Uso: /kick <nick>");
+          break;
+        }
+        const target = members.find(
+          (m) => m.nickname.toLowerCase() === nick.toLowerCase()
+        );
+        if (!target) {
+          pushNotice(`Utente "${nick}" non trovato in questo canale.`);
+          break;
+        }
+        try {
+          await adminCall("kick", {
+            channelId: currentChannelId,
+            uid: target.userId,
+            nick: target.nickname,
+          });
+        } catch {
+          pushNotice("Kick fallito.");
+        }
+        break;
+      }
+
       default:
         pushNotice(`Comando sconosciuto: /${cmd} — scrivi /help`);
     }

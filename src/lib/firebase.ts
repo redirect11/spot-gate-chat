@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import type { FirebaseApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import type { Analytics } from "firebase/analytics";
 
@@ -25,6 +26,11 @@ export function getDb() {
 
 export function getFirebaseAuth() {
   return getAuth(getFirebaseApp());
+}
+
+// Cloud Functions — same region as the deployed functions (europe-west8).
+export function getAppFunctions() {
+  return getFunctions(getFirebaseApp(), "europe-west8");
 }
 
 /**
