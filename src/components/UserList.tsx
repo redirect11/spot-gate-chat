@@ -73,9 +73,14 @@ export default function UserList({
                 }
               >
                 <span className="user-sigil">@</span>
-                <span className="user-nick" style={{ color: b.nickColor }}>
+                <span
+                  className="user-nick"
+                  style={{ color: b.nickColor, opacity: b.enabled ? 1 : 0.5 }}
+                >
                   {b.nickname}
-                  <span className="user-you"> (bot)</span>
+                  <span className="user-you">
+                    {b.enabled ? " (bot)" : " (bot, off)"}
+                  </span>
                 </span>
               </li>
             ))}

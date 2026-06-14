@@ -211,6 +211,13 @@ body {
   background: rgba(88, 166, 255, 0.08);
   border-left-color: var(--accent);
 }
+.channel-item-unread {
+  background: rgba(248, 81, 73, 0.07);
+}
+.channel-item-unread .channel-name {
+  color: var(--text);
+  font-weight: bold;
+}
 
 .channel-name {
   overflow: hidden;

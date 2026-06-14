@@ -32,10 +32,12 @@ export const COMMANDS: ChatCommand[] = [
   { name: "unban", usage: "/unban <nick>", desc: "Rimuovi un ban", op: true },
   { name: "mutechannel", usage: "/mutechannel", desc: "Modera il canale: solo gli op scrivono", op: true },
   { name: "unmutechannel", usage: "/unmutechannel", desc: "Togli la moderazione del canale", op: true },
-  { name: "say", usage: "/say <bot-id> <testo>", desc: "Fai dire qualcosa a un bot", op: true },
-  { name: "botoff", usage: "/botoff <bot-id>", desc: "Disattiva un bot", op: true },
-  { name: "boton", usage: "/boton <bot-id>", desc: "Attiva un bot", op: true },
-  { name: "botreply", usage: "/botreply <bot-id> on|off", desc: "Risposte AI del bot on/off (off = messaggio automatico)", op: true },
+  { name: "opme", usage: "/opme", desc: "Diventa operatore (@) di questo canale", op: true },
+  // ── Bot config (nel DM del bot, dopo /oper) ──
+  { name: "status", usage: "/status", desc: "Mostra la config del bot (nel suo DM)", op: true },
+  { name: "enable", usage: "/enable", desc: "Attiva il bot (nel suo DM)", op: true },
+  { name: "disable", usage: "/disable", desc: "Disattiva il bot (nel suo DM)", op: true },
+  { name: "set", usage: "/set <campo> <valore>", desc: "Configura il bot: replies/prompt/autoreply/model/nick/trigger/channels (nel suo DM)", op: true },
 ];
 
 export const COMMAND_NAMES: string[] = COMMANDS.map((c) => c.name);

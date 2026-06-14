@@ -591,6 +591,50 @@ export const adminCommand = onCall(
         return { ok: true };
       }
 
+      case "bot.set": {
+        if (!args.botId || !args.field)
+          throw new HttpsError("invalid-argument", "botId e field richiesti");
+        const value = args.value ?? "";
+        const on = value === "on" || value === "true";
+        const updates: Record<string, unknown> = {};
+        switch (args.field) {
+          case "replies":
+            updates.repliesEnabled = on;
+            break;
+          case "enabled":
+            updates.enabled = on;
+            break;
+          case "prompt":
+            updates.systemPrompt = value;
+            break;
+          case "autoreply":
+            updates.autoReply = value;
+            break;
+          case "model":
+            updates.model = value;
+            break;
+          case "nick":
+            updates.nickname = value.slice(0, 40);
+            break;
+          case "trigger":
+            updates.trigger = { type: value === "all" ? "all" : "mention" };
+            break;
+          case "channels":
+            updates.channels =
+              value.trim() === "*"
+                ? ["*"]
+                : value
+                    .split(",")
+                    .map((s) => s.trim().replace(/^#/, ""))
+                    .filter(Boolean);
+            break;
+          default:
+            throw new HttpsError("invalid-argument", "campo sconosciuto");
+        }
+        await db.collection("bots").doc(args.botId).set(updates, { merge: true });
+        return { ok: true };
+      }
+
       case "bot.say": {
         if (!args.botId || !args.channelId || !args.text)
           throw new HttpsError("invalid-argument", "parametri mancanti");

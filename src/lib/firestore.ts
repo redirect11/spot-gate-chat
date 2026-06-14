@@ -397,10 +397,12 @@ export function subscribeDmThreads(
 // Live list of enabled bots from the /bots registry (public-read). The UI shows
 // these as members of the channels they operate in.
 export function subscribeToBots(callback: (bots: Bot[]) => void): () => void {
+  // returns all bots (incl. disabled) so operators can reconfigure them
   return onSnapshot(collection(db(), "bots"), (snap) => {
-    const bots: Bot[] = snap.docs
-      .map((d) => ({ id: d.id, ...(d.data() as Omit<Bot, "id">) }))
-      .filter((b) => b.enabled);
+    const bots: Bot[] = snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<Bot, "id">),
+    }));
     callback(bots);
   });
 }

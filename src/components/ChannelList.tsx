@@ -34,6 +34,8 @@ export default function ChannelList({
   const [newName, setNewName] = useState("");
   const [newTopic, setNewTopic] = useState("");
 
+  const fmtUnread = (n: number) => (n > 99 ? ">99" : String(n));
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     const name = newName.trim().replace(/^#+/, "").replace(/\s+/g, "-");
@@ -61,13 +63,17 @@ export default function ChannelList({
               ch.id === currentChannelId && !activeDmUid
                 ? " channel-item-active"
                 : ""
+            }${
+              unread[ch.id] > 0 && ch.id !== currentChannelId
+                ? " channel-item-unread"
+                : ""
             }`}
             onClick={() => onSelect(ch.id)}
             title={ch.topic}
           >
             <span className="channel-name">{ch.name}</span>
             {unread[ch.id] > 0 && ch.id !== currentChannelId ? (
-              <span className="channel-unread">{unread[ch.id]}</span>
+              <span className="channel-unread">{fmtUnread(unread[ch.id])}</span>
             ) : (
               ch.memberCount > 0 && (
                 <span className="channel-count">{ch.memberCount}</span>
@@ -86,6 +92,10 @@ export default function ChannelList({
                 key={t.convoId}
                 className={`channel-item${
                   t.otherUid === activeDmUid ? " channel-item-active" : ""
+                }${
+                  unread[`dm:${t.otherUid}`] > 0 && t.otherUid !== activeDmUid
+                    ? " channel-item-unread"
+                    : ""
                 }`}
                 onClick={() => onSelectDm?.(t.otherUid, t.otherNick)}
                 title={t.otherNick}
@@ -95,7 +105,7 @@ export default function ChannelList({
                   {unread[`dm:${t.otherUid}`] > 0 &&
                     t.otherUid !== activeDmUid && (
                       <span className="channel-unread">
-                        {unread[`dm:${t.otherUid}`]}
+                        {fmtUnread(unread[`dm:${t.otherUid}`])}
                       </span>
                     )}
                   <button

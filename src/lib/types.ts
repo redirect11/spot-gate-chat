@@ -47,4 +47,7 @@ export interface Bot {
   channels: string[];
   role: string;
   enabled: boolean;
+  model?: string;
+  repliesEnabled?: boolean;
+  trigger?: { type: string };
 }

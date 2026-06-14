@@ -587,69 +587,93 @@ export default function ChatApp() {
         }
         break;
       }
-      case "boton":
-      case "botoff": {
-        if (!isAdmin) {
-          pushNotice("Comando riservato agli operatori — /oper <password>");
+      case "opme": {
+        if (currentDm) {
+          pushNotice("Usa /opme in un canale, non in un DM.");
           break;
         }
-        const id = parts[0];
-        if (!id) {
-          pushNotice(`Uso: /${cmd} <bot-id>`);
+        if (!isAdmin) {
+          pushNotice("Prima autenticati: /oper <password> (nel DM di un bot).");
           break;
         }
         try {
-          await adminCall(cmd === "boton" ? "bot.enable" : "bot.disable", {
-            botId: id,
-          });
-          pushNotice(
-            `Bot "${id}" ${cmd === "boton" ? "attivato" : "disattivato"}.`
-          );
-        } catch {
-          pushNotice("Operazione fallita.");
-        }
-        break;
-      }
-      case "botreply": {
-        if (!isAdmin) {
-          pushNotice("Comando riservato agli operatori — /oper <password>");
-          break;
-        }
-        const id = parts[0];
-        const mode = (parts[1] || "").toLowerCase();
-        if (!id || (mode !== "on" && mode !== "off")) {
-          pushNotice("Uso: /botreply <bot-id> on|off");
-          break;
-        }
-        try {
-          await adminCall(mode === "on" ? "bot.repliesOn" : "bot.repliesOff", {
-            botId: id,
-          });
-          pushNotice(
-            `Risposte AI di "${id}" ${mode === "on" ? "attivate" : "disattivate"}.`
-          );
-        } catch {
-          pushNotice("Operazione fallita.");
-        }
-        break;
-      }
-      case "say": {
-        if (!isAdmin) {
-          pushNotice("Comando riservato agli operatori — /oper <password>");
-          break;
-        }
-        const id = parts[0];
-        const text = arg.slice((id || "").length).trim();
-        if (!id || !text) {
-          pushNotice("Uso: /say <bot-id> <testo>");
-          break;
-        }
-        try {
-          await adminCall("bot.say", {
-            botId: id,
+          await adminCall("op", {
             channelId: currentChannelId,
-            text,
+            uid: user.uid,
+            nick: user.nickname,
           });
+          pushNotice("Ora sei operatore (@) di questo canale.");
+        } catch {
+          pushNotice("Operazione fallita.");
+        }
+        break;
+      }
+      // ── Bot configuration — only inside a bot's DM, after /oper ─────────────
+      case "enable":
+      case "disable":
+      case "status":
+      case "set": {
+        const botId =
+          currentDm && currentDm.uid.startsWith("bot:")
+            ? currentDm.uid.slice(4)
+            : null;
+        if (!botId) {
+          pushNotice("Questi comandi si usano nel messaggio privato di un bot.");
+          break;
+        }
+        if (!isAdmin) {
+          pushNotice(
+            "Configurazione riservata al proprietario: /oper <password> qui nel DM."
+          );
+          break;
+        }
+        if (cmd === "status") {
+          const b = bots.find((x) => x.id === botId);
+          pushNotice(
+            b
+              ? `Config ${b.nickname} (#${b.id}):\n  enabled: ${b.enabled}\n  ruolo: ${b.role}\n  modello: ${b.model ?? "-"}\n  risposte AI: ${b.repliesEnabled === false ? "off" : "on"}\n  trigger: ${b.trigger?.type ?? "mention"}\n  canali: ${(b.channels || []).join(", ")}`
+              : "Bot non trovato."
+          );
+          break;
+        }
+        if (cmd === "enable" || cmd === "disable") {
+          try {
+            await adminCall("bot.set", {
+              botId,
+              field: "enabled",
+              value: cmd === "enable" ? "on" : "off",
+            });
+            pushNotice(`Bot ${cmd === "enable" ? "attivato" : "disattivato"}.`);
+          } catch {
+            pushNotice("Operazione fallita.");
+          }
+          break;
+        }
+        // /set <field> <value>
+        const field = (parts[0] || "").toLowerCase();
+        const value = arg.slice(field.length).trim();
+        const FIELDS = [
+          "replies",
+          "prompt",
+          "autoreply",
+          "model",
+          "nick",
+          "trigger",
+          "channels",
+        ];
+        if (!FIELDS.includes(field)) {
+          pushNotice(
+            "Uso: /set <replies|prompt|autoreply|model|nick|trigger|channels> <valore>"
+          );
+          break;
+        }
+        if (field !== "status" && !value) {
+          pushNotice(`Uso: /set ${field} <valore>`);
+          break;
+        }
+        try {
+          await adminCall("bot.set", { botId, field, value });
+          pushNotice(`Impostato "${field}".`);
         } catch {
           pushNotice("Operazione fallita.");
         }
